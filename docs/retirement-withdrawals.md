@@ -131,3 +131,8 @@ time; it is not an isolated comparison of tax rates.
 For annual plans the map's preferred strategy and threshold brackets follow the selected
 objective. Terminal-value metrics remain separately available. Sample counts continue to
 describe a finite grid, without probabilities or a guarantee about outcomes between samples.
+
+For random annual return sequences, use [Monte Carlo income analysis](monte-carlo.md). It retains
+the same annual spending and tax rules, with all strategies sharing each market path. Its report
+adds marginal annual income bands, individual trajectories, relative income declines and an
+optional real income floor; income distributions retain zero and infeasible outcomes.

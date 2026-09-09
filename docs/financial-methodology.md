@@ -5,8 +5,9 @@
 The engine models the location of one accumulating global equity exposure. It does not compare
 different assets. Both accounts use the same effective nominal annual return, expressed in PLN
 after fund costs and currency effects. An annual factor is converted to a smooth daily compound
-factor using the actual number of calendar days in the year. This is deliberately a deterministic
-scenario; it contains no volatility or probability claim.
+factor using the actual number of calendar days in the year. The accounting engine evaluates
+each supplied path deterministically. The optional [Monte Carlo layer](monte-carlo.md) samples
+annual returns before calling this engine; within-year prices remain smooth in both modes.
 
 Amounts are computed with `BigDecimal` and DECIMAL128 arithmetic. Daily growth factors are
 constructed from floating-point exponentiation once per year; results are projections, not a
@@ -136,8 +137,9 @@ mean that spending meets a desired income floor. The annual payment history and 
 withdrawals are reported separately. There is no terminal sale at the end of accumulation;
 the analytical liquidation convention applies only at the end of the entire simulation.
 
-This first version does not estimate probabilities, parameter uncertainty or future changes to
-law. It omits carryforward losses, other investment income, foreign investor-level withholding,
+Accounting alone does not estimate probabilities. Monte Carlo adds conditional sample counts
+under an explicit return model, without estimating parameter uncertainty or future changes to
+law. The engine omits carryforward losses, other investment income, foreign investor-level withholding,
 FX transaction spreads, account fees, late-payment interest and holiday-shifted deadlines.
 Paying on 30 April/31 May is an explicit earlier-payment convention when a statutory deadline
 would move to a later working day. Tax cash comes exclusively from the modeled household budget.

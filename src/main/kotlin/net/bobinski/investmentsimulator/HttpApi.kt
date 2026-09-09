@@ -22,6 +22,8 @@ import java.time.DateTimeException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
+import net.bobinski.investmentsimulator.engine.MonteCarloAnalysis
+import net.bobinski.investmentsimulator.engine.MonteCarloRequest
 import net.bobinski.investmentsimulator.engine.SensitivityAnalysis
 import net.bobinski.investmentsimulator.engine.SensitivityRequest
 import net.bobinski.investmentsimulator.engine.SimulationEngine
@@ -79,6 +81,10 @@ fun Application.simulatorModule() {
         post("/v1/sensitivity-analyses") {
             val request = simulatorJson.decodeFromString<SensitivityRequest>(call.readJsonBody())
             call.respond(SensitivityAnalysis.analyze(request))
+        }
+        post("/v1/monte-carlo-analyses") {
+            val request = simulatorJson.decodeFromString<MonteCarloRequest>(call.readJsonBody())
+            call.respond(MonteCarloAnalysis.analyze(request))
         }
         post("/v1/portfolio/snapshots") {
             val request = simulatorJson.decodeFromString<PortfolioSnapshotRequest>(call.readJsonBody())

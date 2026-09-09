@@ -159,6 +159,16 @@ class ReportParser(HTMLParser):
 
 
 class RenderSensitivityTest(unittest.TestCase):
+    def test_zero_rate_annual_policy_is_accepted_with_zero_payments(self):
+        report = retirement_report()
+        report["request"]["baseRequest"]["annualWithdrawalPlan"]["rate"] = 0
+        for scenario in report["scenarios"]:
+            for strategy in scenario["strategies"]:
+                for payment in strategy["annualWithdrawals"]:
+                    payment.update(rate=0, requestedPln="0.00", paidPln="0.00", realPaidPln="0.00")
+        parsed = ReportParser(renderer.render_report(report))
+        self.assertEqual(report, json.loads(parsed.scripts[0]["text"]))
+
     def test_retirement_objective_income_history_and_horizon_pairs_are_preserved(self):
         report = retirement_report()
         html = renderer.render_report(report)

@@ -171,5 +171,51 @@ jobs:
                   for key, value in summary.items():
                       if key in replay_results[summary["strategyId"]]:
                           assert value == replay_results[summary["strategyId"]][key], f"Retirement replay changed {key}"
-          print("Distributed CLI verified migration tax, Portfolio analysis, sensitivity and retirement replay, validation and OpenAPI.")
+
+          monte_carlo_request = json.loads(Path("examples/monte-carlo.json").read_text())
+          monte_carlo_request["pathCount"] = 4
+          monte_carlo = run_cli("monte-carlo", monte_carlo_request)
+          assert monte_carlo["pathCount"] == len(monte_carlo["paths"]) == 4
+          assert monte_carlo["request"]["seed"] == monte_carlo_request["seed"]
+          assert monte_carlo["returnModel"] and monte_carlo["quantileMethod"]
+          assert monte_carlo["strategySummaries"]
+          monte_carlo_json = temporary / "monte-carlo.json"
+          monte_carlo_json.write_text(json.dumps(monte_carlo))
+          subprocess.run([
+              "python3", "scripts/render-monte-carlo.py", "--input", str(monte_carlo_json),
+              "--output", str(temporary / "monte-carlo.html"),
+          ], check=True, timeout=30)
+
+          def assert_path_replay(path, comparison):
+              assert path["recommendation"] == comparison["recommendation"]
+              if path["preferredStrategyId"] is not None:
+                  assert path["preferredStrategyId"] == comparison["preferredStrategyId"]
+              compared = {item["strategyId"]: item for item in comparison["results"]}
+              for summary in path["strategies"]:
+                  for key, value in summary.items():
+                      if key in compared[summary["strategyId"]]:
+                          assert value == compared[summary["strategyId"]][key], f"Monte Carlo replay changed {key}"
+
+          sampled_path = monte_carlo["paths"][-1]
+          resolved_path = run_cli("monte-carlo-path", monte_carlo["request"], extra_args=(sampled_path["id"],))
+          assert sampled_path["annualReturns"] == [
+              {"year": year["year"], "equityReturnRate": year["equityReturnRate"]}
+              for year in resolved_path["assumptions"]
+          ]
+          assert_path_replay(sampled_path, run_cli("compare", resolved_path))
+
+          zero_volatility = dict(monte_carlo_request, annualLogReturnVolatility=0.0, pathCount=2)
+          zero_paths = run_cli("monte-carlo", zero_volatility)
+          deterministic = run_cli("compare", zero_volatility["baseRequest"])
+          for path in zero_paths["paths"]:
+              assert_path_replay(path, deterministic)
+
+          missing_seed = dict(monte_carlo_request)
+          del missing_seed["seed"]
+          rejected = subprocess.run(
+              [cli, "monte-carlo", "-"], input=json.dumps(missing_seed),
+              text=True, capture_output=True, timeout=30,
+          )
+          assert rejected.returncode == 2 and not rejected.stdout, "Monte Carlo requires an explicit seed"
+          print("Distributed CLI verified portfolio, sensitivity, retirement and seeded Monte Carlo replay, validation and OpenAPI.")
           PY

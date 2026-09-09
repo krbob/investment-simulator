@@ -4,7 +4,7 @@ A small, stateless Kotlin backend for comparing the same accumulating global equ
 inside a Polish taxable brokerage account and an OKI. It starts with deterministic accounting:
 FIFO purchases, contributions, net withdrawals, migration costs and calendar-year taxes.
 
-The simulation engine is shared by the CLI, HTTP API and parameter-sweep experiments.
+The simulation engine is shared by the CLI, HTTP API, sensitivity grids and seeded Monte Carlo.
 Portfolio remains the source of investor transactions. This project stores no canonical portfolio
 and does not execute trades.
 
@@ -94,7 +94,8 @@ not a guaranteed-income or retirement-safety assessment. Read the [retirement gu
 
 ## Scope and methodology
 
-This is a deterministic research MVP. It uses one taxpayer, one taxable account, one OKI and one
+This research MVP evaluates deterministic paths and sampled annual return paths. It uses one
+taxpayer, one taxable account, one OKI and one
 synthetic accumulating global equity exposure in PLN. The global ETF case has **no OKI asset
 allowance**. Supplied equity returns already include fund costs and currency effects; only
 broker trading fees are applied separately. The rate schedule is supplied explicitly, including
@@ -106,9 +107,31 @@ not forecasts. The 2027 OKI rate is fixed by the enacted law; subsequent example
 Read [financial methodology](docs/financial-methodology.md) before interpreting results. It specifies
 the event order, daily OKI base, FIFO and rounding, annual tax payment dates, initial cash buffer,
 partial-year convention and terminal netting. Important limits include no prior-year loss
-carryforwards, stochastic paths, automated forecasts, intraday trading, multiple instruments,
+carryforwards, calibrated forecasts, within-year volatility, intraday trading, multiple instruments,
 broker FX spreads, or automatic selection of a globally optimal policy. Ranking only compares
-the supplied strategies on the supplied path. Keep the input JSON alongside the result for replay.
+the supplied strategies on each supplied or sampled path. Keep the input JSON alongside the result for replay.
+
+## Monte Carlo income analysis
+
+The `monte-carlo` command and `POST /v1/monte-carlo-analyses` evaluate all candidate strategies
+on the same seeded annual return paths. The report shows real annual income P10/P50/P90,
+individual trajectories, declines of at least 25%/50% from the first real annual payment,
+and optional years below a real income floor. Residual wealth, cumulative real withdrawals and
+paired objective advantage over the baseline remain separate.
+
+```sh
+build/install/investment-simulator/bin/investment-simulator monte-carlo \
+  examples/monte-carlo.json > monte-carlo.local.json
+python3 scripts/render-monte-carlo.py \
+  --input monte-carlo.local.json --output monte-carlo.local.html
+```
+
+The synthetic example runs 100 paths with 20 years of accumulation and 30 years of annual
+4% withdrawals. Its lognormal return model and volatility are explicit, uncalibrated assumptions;
+inflation and OKI rates stay on their supplied schedules. Annual quantile bands are marginal
+summaries, not a single trajectory or guarantees. `monte-carlo-path` resolves a sampled path for
+exact `compare` replay. See the [Monte Carlo guide](docs/monte-carlo.md) for parameters, limits,
+income denominators, paired comparisons and reproducibility.
 
 ## Portfolio integration
 
@@ -207,4 +230,5 @@ tax-base rounding, budget conservation, Portfolio reconciliation, data-gap handl
 and HTTP/CLI contracts. GitHub Actions runs these checks, builds the distribution, and exercises
 the packaged CLI against synthetic examples, including sensitivity replay and HTML report generation.
 Sensitivity tests cover rate preservation, horizons, feasibility, sampled transitions and runtime
-bounds. CI uses no Portfolio credentials or investor data.
+bounds. Monte Carlo tests cover seeded replay, zero-volatility equivalence, paired outcomes,
+income diagnostics, quantiles and batch validation. CI uses no Portfolio credentials or investor data.

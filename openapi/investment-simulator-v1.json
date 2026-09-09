@@ -3,7 +3,7 @@
     "info": {
         "title": "Investment Simulator API",
         "version": "0.2.0",
-        "description": "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. An annual withdrawal plan supports percentage withdrawals from current assets after accumulation; AUTO then compares real withdrawals plus real terminal wealth. Legacy terminal advantage fields retain their meaning. Bodies are limited to 2097152 bytes. The default listener is 127.0.0.1:8080."
+        "description": "Deterministic and seeded Monte Carlo comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. An annual withdrawal plan supports percentage withdrawals from current assets after accumulation; AUTO then compares real withdrawals plus real terminal wealth. Legacy terminal advantage fields retain their meaning. Bodies are limited to 2097152 bytes. The default listener is 127.0.0.1:8080."
     },
     "servers": [
         {
@@ -134,6 +134,65 @@
                     },
                     "400": {
                         "description": "Invalid JSON, invalid scenario, or exceeded grid limit; no partial result is returned",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request exceeds the body size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be application/json",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/monte-carlo-analyses": {
+            "post": {
+                "operationId": "analyzeMonteCarlo",
+                "summary": "Simulate reproducible annual return paths and retirement income distributions",
+                "description": "A seed between 0 and 281474976710655 is required. Each request supports 1 to 256 paths, at most 10000000 simulated strategy-days, and 500000 opening tax-lot replays. annualLogReturnVolatility must be between 0 and 0.5; zero reproduces the base annual return path. The annual withdrawal plan must start within the simulation, whose final date is 31 December. Strategies share each sampled annual return path while the supplied inflation and OKI assumptions stay fixed. minimumRealAnnualIncomePln is optional nonnegative annual household income in purchasing power at baseRequest.startDate, at most 1000000000000000 PLN with at most 12 decimal places; omission means income adequacy is not assessed. Results include the normalized request and per-path annual returns for reproducible replay. Income distributions include all paths; decline counts identify their eligible denominators and feasible strategy comparisons remain separate.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MonteCarloRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Complete sampled analysis; frequencies and nearest-rank p10/p50/p90 quantiles are conditional on the supplied model",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MonteCarloResult"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, invalid retirement plan, unsupported sampled path, or exceeded simulation limit; no partial result is returned",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1909,6 +1968,615 @@
                     "kind",
                     "fromScenarioId",
                     "toScenarioId"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloRequest": {
+                "type": "object",
+                "properties": {
+                    "baseRequest": {
+                        "$ref": "#/components/schemas/ComparisonRequest"
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 281474976710655
+                    },
+                    "annualLogReturnVolatility": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 0.5
+                    },
+                    "pathCount": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256,
+                        "default": 100
+                    },
+                    "minimumRealAnnualIncomePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "baseRequest",
+                    "seed",
+                    "annualLogReturnVolatility"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloResult": {
+                "type": "object",
+                "properties": {
+                    "monteCarloVersion": {
+                        "type": "string"
+                    },
+                    "engineVersion": {
+                        "type": "string"
+                    },
+                    "taxRulesVersion": {
+                        "type": "string"
+                    },
+                    "request": {
+                        "$ref": "#/components/schemas/MonteCarloRequest"
+                    },
+                    "returnModel": {
+                        "type": "string"
+                    },
+                    "quantileMethod": {
+                        "type": "string"
+                    },
+                    "comparisonObjective": {
+                        "type": "string",
+                        "enum": [
+                            "AUTO",
+                            "REAL_TERMINAL_WEALTH",
+                            "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
+                        ]
+                    },
+                    "pathCount": {
+                        "type": "integer"
+                    },
+                    "evaluatedStrategyDays": {
+                        "type": "integer"
+                    },
+                    "allInfeasiblePathCount": {
+                        "type": "integer"
+                    },
+                    "paths": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MonteCarloPath"
+                        }
+                    },
+                    "strategySummaries": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MonteCarloStrategySummary"
+                        }
+                    },
+                    "limitations": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "monteCarloVersion",
+                    "engineVersion",
+                    "taxRulesVersion",
+                    "request",
+                    "returnModel",
+                    "quantileMethod",
+                    "comparisonObjective",
+                    "pathCount",
+                    "evaluatedStrategyDays",
+                    "allInfeasiblePathCount",
+                    "paths",
+                    "strategySummaries",
+                    "limitations"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloPath": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "annualReturns": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MonteCarloAnnualReturn"
+                        }
+                    },
+                    "preferredStrategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "highestObjectiveStrategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "recommendation": {
+                        "type": "string",
+                        "enum": [
+                            "CHANGE",
+                            "KEEP_BASELINE",
+                            "NO_CLEAR_ADVANTAGE",
+                            "WITHDRAWAL_SHORTFALL"
+                        ]
+                    },
+                    "strategies": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MonteCarloStrategyResult"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "annualReturns",
+                    "preferredStrategyId",
+                    "highestObjectiveStrategyId",
+                    "recommendation",
+                    "strategies"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloAnnualReturn": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer"
+                    },
+                    "equityReturnRate": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "year",
+                    "equityReturnRate"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloStrategyResult": {
+                "type": "object",
+                "properties": {
+                    "strategyId": {
+                        "type": "string"
+                    },
+                    "feasible": {
+                        "type": "boolean"
+                    },
+                    "realNetLiquidationValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realWithdrawalsPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realTotalBenefitPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "comparisonValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "objectiveAdvantageVsBaselinePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalShortfallPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "unpaidTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "outstandingTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "capitalGainsTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "tradingFeesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "annualWithdrawals": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AnnualWithdrawalResult"
+                        }
+                    },
+                    "income": {
+                        "$ref": "#/components/schemas/MonteCarloIncomeMetrics"
+                    }
+                },
+                "required": [
+                    "strategyId",
+                    "feasible",
+                    "realNetLiquidationValuePln",
+                    "realWithdrawalsPaidPln",
+                    "realTotalBenefitPln",
+                    "comparisonValuePln",
+                    "objectiveAdvantageVsBaselinePln",
+                    "withdrawalShortfallPln",
+                    "unpaidTaxPln",
+                    "outstandingTaxPln",
+                    "capitalGainsTaxPaidPln",
+                    "okiTaxPaidPln",
+                    "tradingFeesPln",
+                    "annualWithdrawals",
+                    "income"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloIncomeMetrics": {
+                "type": "object",
+                "properties": {
+                    "annualPaymentCount": {
+                        "type": "integer"
+                    },
+                    "firstRealPaymentPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "minimumRealPaymentPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "zeroPaymentYearCount": {
+                        "type": "integer"
+                    },
+                    "declineEligible": {
+                        "type": "boolean"
+                    },
+                    "declineAtLeast25Percent": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "declineAtLeast50Percent": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "yearsBelowMinimum": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "longestRunBelowMinimum": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "annualPaymentCount",
+                    "firstRealPaymentPln",
+                    "minimumRealPaymentPln",
+                    "zeroPaymentYearCount",
+                    "declineEligible",
+                    "declineAtLeast25Percent",
+                    "declineAtLeast50Percent",
+                    "yearsBelowMinimum",
+                    "longestRunBelowMinimum"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloStrategySummary": {
+                "type": "object",
+                "properties": {
+                    "strategyId": {
+                        "type": "string"
+                    },
+                    "pathCount": {
+                        "type": "integer"
+                    },
+                    "feasiblePathCount": {
+                        "type": "integer"
+                    },
+                    "preferredPathCount": {
+                        "type": "integer"
+                    },
+                    "highestObjectivePathCount": {
+                        "type": "integer"
+                    },
+                    "comparableToBaselinePathCount": {
+                        "type": "integer"
+                    },
+                    "objectiveAdvantageVsBaselinePln": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/MonteCarloMoneyDistribution"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "realNetLiquidationValuePln": {
+                        "$ref": "#/components/schemas/MonteCarloMoneyDistribution"
+                    },
+                    "realWithdrawalsPaidPln": {
+                        "$ref": "#/components/schemas/MonteCarloMoneyDistribution"
+                    },
+                    "comparisonValuePln": {
+                        "$ref": "#/components/schemas/MonteCarloMoneyDistribution"
+                    },
+                    "incomeDeclineEligiblePathCount": {
+                        "type": "integer"
+                    },
+                    "zeroFirstPaymentPathCount": {
+                        "type": "integer"
+                    },
+                    "insufficientIncomeHistoryPathCount": {
+                        "type": "integer"
+                    },
+                    "declineAtLeast25PercentPathCount": {
+                        "type": "integer"
+                    },
+                    "declineAtLeast50PercentPathCount": {
+                        "type": "integer"
+                    },
+                    "anyZeroPaymentPathCount": {
+                        "type": "integer"
+                    },
+                    "anyYearBelowMinimumPathCount": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumYearsBelowMinimum": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumConsecutiveYearsBelowMinimum": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "annualIncome": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MonteCarloAnnualIncome"
+                        }
+                    }
+                },
+                "required": [
+                    "strategyId",
+                    "pathCount",
+                    "feasiblePathCount",
+                    "preferredPathCount",
+                    "highestObjectivePathCount",
+                    "comparableToBaselinePathCount",
+                    "objectiveAdvantageVsBaselinePln",
+                    "realNetLiquidationValuePln",
+                    "realWithdrawalsPaidPln",
+                    "comparisonValuePln",
+                    "incomeDeclineEligiblePathCount",
+                    "zeroFirstPaymentPathCount",
+                    "insufficientIncomeHistoryPathCount",
+                    "declineAtLeast25PercentPathCount",
+                    "declineAtLeast50PercentPathCount",
+                    "anyZeroPaymentPathCount",
+                    "anyYearBelowMinimumPathCount",
+                    "maximumYearsBelowMinimum",
+                    "maximumConsecutiveYearsBelowMinimum",
+                    "annualIncome"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloMoneyDistribution": {
+                "type": "object",
+                "properties": {
+                    "sampleCount": {
+                        "type": "integer"
+                    },
+                    "minimum": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "p10": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "p50": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "p90": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "maximum": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "sampleCount",
+                    "minimum",
+                    "p10",
+                    "p50",
+                    "p90",
+                    "maximum"
+                ],
+                "additionalProperties": false
+            },
+            "MonteCarloAnnualIncome": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "realPaidPln": {
+                        "$ref": "#/components/schemas/MonteCarloMoneyDistribution"
+                    },
+                    "zeroPaymentPathCount": {
+                        "type": "integer"
+                    },
+                    "belowMinimumPathCount": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "date",
+                    "realPaidPln",
+                    "zeroPaymentPathCount",
+                    "belowMinimumPathCount"
                 ],
                 "additionalProperties": false
             },

@@ -8,6 +8,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
+import net.bobinski.investmentsimulator.engine.MonteCarloAnalysis
+import net.bobinski.investmentsimulator.engine.MonteCarloRequest
 import net.bobinski.investmentsimulator.engine.SensitivityAnalysis
 import net.bobinski.investmentsimulator.engine.SensitivityRequest
 import net.bobinski.investmentsimulator.engine.SimulationEngine
@@ -44,6 +46,16 @@ internal fun runCommand(
             require(args.size == 3) { "Usage: sensitivity-scenario <request.json|-> <scenario-id>" }
             val request = simulatorJson.decodeFromString<SensitivityRequest>(readInput(args[1], input))
             output.println(simulatorJson.encodeToString(SensitivityAnalysis.resolveScenario(request, args[2])))
+        }
+        "monte-carlo" -> {
+            require(args.size == 2) { "Usage: monte-carlo <request.json|->" }
+            val request = simulatorJson.decodeFromString<MonteCarloRequest>(readInput(args[1], input))
+            output.println(simulatorJson.encodeToString(MonteCarloAnalysis.analyze(request)))
+        }
+        "monte-carlo-path" -> {
+            require(args.size == 3) { "Usage: monte-carlo-path <request.json|-> <path-id>" }
+            val request = simulatorJson.decodeFromString<MonteCarloRequest>(readInput(args[1], input))
+            output.println(simulatorJson.encodeToString(MonteCarloAnalysis.resolvePath(request, args[2])))
         }
         "import-portfolio" -> {
             require(args.size == 2) { "Usage: import-portfolio <bundle.json|->" }
@@ -84,6 +96,8 @@ private val USAGE = """
       compare <request.json|->    Compare strategies; JSON result goes to stdout.
       sensitivity <request.json|->  Compare a bounded grid of assumptions and horizons.
       sensitivity-scenario <request.json|-> <scenario-id>  Print one grid scenario for replay with compare.
+      monte-carlo <request.json|->  Simulate seeded annual returns and retirement income distributions.
+      monte-carlo-path <request.json|-> <path-id>  Print one sampled path for replay with compare.
       import-portfolio <bundle.json|->  Map a portfolio API snapshot to opening balances.
       analyze-portfolio <request.json|->  Analyze a Portfolio bundle and plan; exit 3 for data gaps.
       serve                       Start the HTTP API (HOST=127.0.0.1, PORT=8080).

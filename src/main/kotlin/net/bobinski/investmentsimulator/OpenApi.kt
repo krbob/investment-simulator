@@ -12,6 +12,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.ComparisonResult
+import net.bobinski.investmentsimulator.engine.MonteCarloAnalysis
+import net.bobinski.investmentsimulator.engine.MonteCarloRequest
+import net.bobinski.investmentsimulator.engine.MonteCarloResult
 import net.bobinski.investmentsimulator.engine.SensitivityAnalysis
 import net.bobinski.investmentsimulator.engine.SensitivityRequest
 import net.bobinski.investmentsimulator.engine.SensitivityResult
@@ -29,6 +32,8 @@ fun openApiDocument(): String {
     val comparisonResult = schemas.schema(ComparisonResult.serializer().descriptor)
     val sensitivityRequest = schemas.schema(SensitivityRequest.serializer().descriptor)
     val sensitivityResult = schemas.schema(SensitivityResult.serializer().descriptor)
+    val monteCarloRequest = schemas.schema(MonteCarloRequest.serializer().descriptor)
+    val monteCarloResult = schemas.schema(MonteCarloResult.serializer().descriptor)
     val snapshotRequest = schemas.schema(PortfolioSnapshotRequest.serializer().descriptor)
     val snapshotResult = schemas.schema(PortfolioSnapshotResult.serializer().descriptor)
     val analysisRequest = schemas.schema(PortfolioAnalysisRequest.serializer().descriptor)
@@ -39,7 +44,7 @@ fun openApiDocument(): String {
             "title" to str("Investment Simulator API"),
             "version" to str("0.2.0"),
             "description" to str(
-                "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. " +
+                "Deterministic and seeded Monte Carlo comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. " +
                     "All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). " +
                     "Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. " +
                     "An annual withdrawal plan supports percentage withdrawals from current assets after accumulation; " +
@@ -85,6 +90,25 @@ fun openApiDocument(): String {
                     "Accumulation horizons require an annualWithdrawalPlan and 1 to 50 withdrawalYears; each derived end must fit the complete base path. " +
                     "The entire grid is validated before simulation. Results group strategy summaries by final and accumulation horizon. " +
                     "Preferred strategies and transitions use comparisonObjective; terminal-value metrics remain available separately.",
+            )),
+            "/v1/monte-carlo-analyses" to obj("post" to operation(
+                "analyzeMonteCarlo",
+                "Simulate reproducible annual return paths and retirement income distributions",
+                monteCarloRequest,
+                monteCarloResult,
+                error,
+                successDescription = "Complete sampled analysis; frequencies and nearest-rank p10/p50/p90 quantiles are conditional on the supplied model",
+                badRequestDescription = "Invalid JSON, invalid retirement plan, unsupported sampled path, or exceeded simulation limit; no partial result is returned",
+                description = "A seed between 0 and ${MonteCarloAnalysis.MAX_SEED} is required. " +
+                    "Each request supports 1 to ${MonteCarloAnalysis.MAX_PATHS} paths, at most ${MonteCarloAnalysis.MAX_STRATEGY_DAYS} simulated strategy-days, " +
+                    "and ${MonteCarloAnalysis.MAX_OPENING_LOT_REPLAYS} opening tax-lot replays. " +
+                    "annualLogReturnVolatility must be between 0 and 0.5; zero reproduces the base annual return path. " +
+                    "The annual withdrawal plan must start within the simulation, whose final date is 31 December. " +
+                    "Strategies share each sampled annual return path while the supplied inflation and OKI assumptions stay fixed. " +
+                    "minimumRealAnnualIncomePln is optional nonnegative annual household income in purchasing power at baseRequest.startDate, " +
+                    "at most 1000000000000000 PLN with at most 12 decimal places; omission means income adequacy is not assessed. " +
+                    "Results include the normalized request and per-path annual returns for reproducible replay. " +
+                    "Income distributions include all paths; decline counts identify their eligible denominators and feasible strategy comparisons remain separate.",
             )),
             "/v1/portfolio/snapshots" to obj("post" to operation(
                 "importPortfolioSnapshot",
@@ -185,7 +209,14 @@ private class SchemaRegistry {
             for (index in 0 until descriptor.elementsCount) {
                 val property = descriptor.getElementName(index)
                 val propertySchema = schema(descriptor.getElementDescriptor(index))
-                properties[property] = if (property in DATE_FIELDS) {
+                properties[property] = if (name == "MonteCarloRequest") {
+                    JsonObject(propertySchema + when (property) {
+                        "seed" -> mapOf("minimum" to JsonPrimitive(0), "maximum" to JsonPrimitive(MonteCarloAnalysis.MAX_SEED))
+                        "pathCount" -> mapOf("minimum" to JsonPrimitive(1), "maximum" to JsonPrimitive(MonteCarloAnalysis.MAX_PATHS), "default" to JsonPrimitive(100))
+                        "annualLogReturnVolatility" -> mapOf("minimum" to JsonPrimitive(0), "maximum" to JsonPrimitive(0.5))
+                        else -> emptyMap()
+                    })
+                } else if (property in DATE_FIELDS) {
                     JsonObject(propertySchema + ("format" to str("date")))
                 } else if (property in TIMESTAMP_FIELDS) {
                     JsonObject(propertySchema + ("format" to str("date-time")))

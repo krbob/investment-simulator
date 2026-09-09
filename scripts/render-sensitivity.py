@@ -88,7 +88,7 @@ def validate_report(report: dict) -> None:
     annual_plan = base.get("annualWithdrawalPlan")
     if annual_plan is not None:
         require(isinstance(annual_plan, dict) and valid_date(annual_plan.get("startDate")) and annual_plan["startDate"].endswith("-01-01"), "Annual withdrawals must start on 1 January.")
-        require(type(annual_plan.get("rate")) in (int, float) and math.isfinite(annual_plan["rate"]) and 0 < annual_plan["rate"] <= 1, "The annual withdrawal fraction must be finite and between zero and one.")
+        require(type(annual_plan.get("rate")) in (int, float) and math.isfinite(annual_plan["rate"]) and 0 <= annual_plan["rate"] <= 1, "The annual withdrawal fraction must be finite and between zero and one.")
     has_objective = "comparisonObjective" in report
     if has_objective:
         require(report["comparisonObjective"] in OBJECTIVES, "The report must state its resolved comparison objective.")
@@ -164,7 +164,7 @@ def validate_report(report: dict) -> None:
                     require(isinstance(withdrawal, dict) and valid_date(withdrawal.get("date")) and withdrawal["date"].endswith("-01-01"), "Annual withdrawal history contains an invalid date.")
                     require(base["startDate"] <= withdrawal["date"] <= coordinates["endDate"] and previous_date < withdrawal["date"], "Annual withdrawal history must be ordered, unique and inside the scenario horizon.")
                     require(annual_plan is not None and (accumulation is None or withdrawal["date"] > accumulation), "Annual withdrawals require a plan and must follow accumulation.")
-                    require(type(withdrawal.get("rate")) in (int, float) and math.isfinite(withdrawal["rate"]) and 0 < withdrawal["rate"] <= 1, "Annual withdrawal history has an invalid rate.")
+                    require(type(withdrawal.get("rate")) in (int, float) and math.isfinite(withdrawal["rate"]) and 0 <= withdrawal["rate"] <= 1, "Annual withdrawal history has an invalid rate.")
                     require(all(decimal_string(withdrawal.get(key)) for key in ANNUAL_MONEY_FIELDS), "Annual withdrawal amounts must be finite decimal strings.")
                     previous_date = withdrawal["date"]
         for key in ("preferredStrategyId", "highestValueStrategyId") + (("highestObjectiveStrategyId",) if has_objective else ()):
