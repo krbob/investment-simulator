@@ -100,6 +100,9 @@ and keeps the accumulated OKI assessment unchanged. For a final partial calendar
 denominator assumes OKI ownership ends at the horizon. Maintaining an empty account until
 31 December would change that denominator and is not modeled. **Use a 31 December horizon for
 full-year comparisons**, as in the supplied experiments.
+The integrated `analyze-portfolio` workflow enforces this horizon and returns `UNSUPPORTED`
+for a final partial year or a declared nonzero prior-year loss carryforward. It also requires
+explicit opening tax state, including on 1 January; see the [integration guide](portfolio-integration.md).
 
 Current-year liabilities remain payable even when their due date is beyond the simulation. A
 negative terminal net value is preserved; insolvency is never clamped to zero. Unmet spending

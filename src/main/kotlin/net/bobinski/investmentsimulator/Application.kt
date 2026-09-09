@@ -9,6 +9,9 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.SimulationEngine
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisRequest
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisService
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisStatus
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotMapper
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotRequest
 
@@ -22,6 +25,7 @@ internal fun runCommand(
     output: PrintStream = System.out,
     error: PrintStream = System.err,
 ): Int = try {
+    var exitCode = 0
     when (args.firstOrNull()) {
         null, "help", "--help", "-h" -> output.println(USAGE)
         "compare" -> {
@@ -33,6 +37,13 @@ internal fun runCommand(
             require(args.size == 2) { "Usage: import-portfolio <bundle.json|->" }
             val request = simulatorJson.decodeFromString<PortfolioSnapshotRequest>(readInput(args[1], input))
             output.println(simulatorJson.encodeToString(PortfolioSnapshotMapper.map(request)))
+        }
+        "analyze-portfolio" -> {
+            require(args.size == 2) { "Usage: analyze-portfolio <request.json|->" }
+            val request = simulatorJson.decodeFromString<PortfolioAnalysisRequest>(readInput(args[1], input))
+            val result = PortfolioAnalysisService.analyze(request)
+            output.println(simulatorJson.encodeToString(result))
+            if (result.status != PortfolioAnalysisStatus.COMPLETE) exitCode = 3
         }
         "openapi" -> {
             require(args.size == 1) { "Usage: openapi" }
@@ -47,7 +58,7 @@ internal fun runCommand(
         }
         else -> throw IllegalArgumentException("Unknown command '${args.first()}'.\n$USAGE")
     }
-    0
+    exitCode
 } catch (exception: Exception) {
     error.println("Error: ${exception.message ?: exception::class.simpleName}")
     2
@@ -60,6 +71,7 @@ private val USAGE = """
     investment-simulator
       compare <request.json|->    Compare strategies; JSON result goes to stdout.
       import-portfolio <bundle.json|->  Map a portfolio API snapshot to opening balances.
+      analyze-portfolio <request.json|->  Analyze a Portfolio bundle and plan; exit 3 for data gaps.
       serve                       Start the HTTP API (HOST=127.0.0.1, PORT=8080).
       openapi                     Print the OpenAPI contract as JSON.
       help                        Show this help.

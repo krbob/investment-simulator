@@ -23,6 +23,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.SimulationEngine
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisRequest
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisService
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotMapper
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotRequest
 
@@ -75,6 +77,10 @@ fun Application.simulatorModule() {
         post("/v1/portfolio/snapshots") {
             val request = simulatorJson.decodeFromString<PortfolioSnapshotRequest>(call.readJsonBody())
             call.respond(PortfolioSnapshotMapper.map(request))
+        }
+        post("/v1/portfolio/analyses") {
+            val request = simulatorJson.decodeFromString<PortfolioAnalysisRequest>(call.readJsonBody())
+            call.respond(PortfolioAnalysisService.analyze(request))
         }
     }
 }

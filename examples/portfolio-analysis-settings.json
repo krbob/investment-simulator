@@ -1,0 +1,100 @@
+{
+  "portfolio": {
+    "selection": {
+      "taxableAccountId": "00000000-0000-0000-0000-000000000001",
+      "instrumentId": "00000000-0000-0000-0000-000000000002"
+    },
+    "verifiedPurchaseCostsPln": []
+  },
+  "plan": {
+    "startDate": "2027-01-01",
+    "endDate": "2036-12-31",
+    "assumptions": [
+      {
+        "year": 2027,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ESTABLISHED"
+      },
+      {
+        "year": 2028,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2029,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2030,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2031,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2032,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2033,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2034,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2035,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2036,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      }
+    ],
+    "monthlyPlan": {
+      "contributionPln": "1000",
+      "contributionUntil": "2033-12-31",
+      "indexContributions": true,
+      "withdrawalPln": "1500",
+      "withdrawalFrom": "2034-01-01",
+      "indexWithdrawals": true
+    },
+    "withdrawalOrder": "TAXABLE_FIRST",
+    "tradingFeeRate": 0.001,
+    "capitalGainsTaxRate": 0.19,
+    "minimumAdvantagePln": "100",
+    "openingValuationPolicy": "REQUIRE_PREVIOUS_DAY_VALUES",
+    "lossCarryforwardPln": "0",
+    "includeLedger": false
+  }
+}

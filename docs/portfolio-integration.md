@@ -4,6 +4,129 @@ Portfolio remains the source of truth for investor accounts and transactions. Th
 consumes a read-only snapshot and returns a proposed scenario; it does not create trades, transfer
 assets, or modify Portfolio settings. No change to the Portfolio repository is required.
 
+## Capture, plan and compare
+
+The integrated workflow accepts `{ "portfolio": <snapshot bundle>, "plan": <analysis plan> }`.
+The portfolio supplies opening positions; the plan supplies dates, annual return/inflation/OKI-rate
+assumptions, contributions, withdrawals and fees. The same Kotlin service handles the CLI and
+`POST /v1/portfolio/analyses` without network access.
+
+Run the complete synthetic example:
+
+```sh
+./gradlew installDist
+build/install/investment-simulator/bin/investment-simulator analyze-portfolio \
+  examples/portfolio-analysis.json > analysis.local.json
+```
+
+It uses a fictitious 31 December 2026 capture, a 2027–2036 horizon and explicitly supplied opening
+tax state. Its outstanding PLN 40 PIT corresponds to the fixture's 2026 FIFO gain of PLN 210.
+The service does not derive that liability: it must be provided as verified input. The remaining
+position is worth PLN 120 with a PLN 60 FIFO cost and PLN 1,150 cash; these small synthetic amounts
+make the imported ledger easy to inspect. Returns and cash-flow plans are illustrative.
+
+For one-command capture from a live API, copy the separate settings template and edit the local file:
+
+```sh
+cp examples/portfolio-analysis-settings.json analysis-settings.local.json
+python3 scripts/analyze-portfolio.py \
+  --base-url http://127.0.0.1:18082 \
+  --settings analysis-settings.local.json \
+  --output analysis.local.json
+```
+
+Settings contain exactly `portfolio` and `plan`. The `portfolio` object contains `selection` plus
+optional `verifiedPurchaseCostsPln`, `okiOpenedOn` and `openingTaxState`; capture fills in `snapshot`,
+`holdings` and `accountSummaries`. Replace the synthetic IDs and plan. The template omits tax state
+and its confirmation date so that unknown tax history cannot silently become zero.
+
+The helper uses the installed local CLI by default (`--simulator` overrides its path), passes the
+captured bundle through stdin, and atomically saves the report. Portfolio's session cookie is
+used only for capture and removed from the simulator subprocess environment. Each GET defaults
+to a 15-second timeout (`--timeout`, maximum 60); the local simulation has a five-minute limit.
+Failures preserve an existing output file. All examples use ignored `*.local.json` paths for
+investor inputs and results. The HTTP equivalent accepts the complete offline request:
+
+```sh
+curl -sS http://127.0.0.1:8080/v1/portfolio/analyses \
+  -H 'Content-Type: application/json' \
+  --data-binary @examples/portfolio-analysis.json
+```
+
+| Result status | CLI / capture helper | HTTP | Meaning |
+| --- | --- | --- | --- |
+| `COMPLETE` | Exit 0; JSON report saved | 200 | Comparison calculated for the supplied scenario |
+| `NEEDS_INPUT` | Exit 3; JSON report saved | 200 | Correct or supply the listed data before comparing |
+| `UNSUPPORTED` | Exit 3; JSON report saved | 200 | The snapshot or plan exceeds current model scope |
+| Malformed input / execution failure | Exit 2; helper preserves existing report | 400 for invalid request | No analysis report |
+
+`dataGaps` contains a code, JSON field path, explanation, and transaction/account IDs where useful.
+For example, each selected foreign taxable purchase without a verified original cost is listed as
+`MISSING_VERIFIED_PURCHASE_COST`, including fully consumed purchases needed for FIFO replay.
+Preflight collects identifiable gaps together; resolving them can reveal further mapping or plan
+validation issues. Blocked results contain neither `resolvedRequest` nor `comparison`.
+
+Successful results include source provenance, explicit assumptions, `strategyDescriptions`,
+`resolvedRequest`, and `comparison`. `COMPLETE` means the calculation completed; inspect the
+comparison's feasibility and explanation before treating any candidate as an actionable choice.
+To reproduce the calculation independently of Portfolio or future prices:
+
+```sh
+python3 - <<'PY'
+import json
+from pathlib import Path
+report = json.loads(Path("analysis.local.json").read_text())
+assert report["status"] == "COMPLETE"
+Path("resolved-request.local.json").write_text(json.dumps(report["resolvedRequest"], indent=2) + "\n")
+PY
+build/install/investment-simulator/bin/investment-simulator compare \
+  resolved-request.local.json > replay.local.json
+```
+
+The candidate set keeps current positions and routes new money to taxable brokerage or OKI,
+then compares moving 25%, 50% or 100% of existing taxable equity to OKI with new money also going
+there. All candidates share the plan's withdrawal order. Migration candidates are omitted when
+there is no taxable equity. Existing OKI assets remain in place. Use `compare` with custom strategies
+for reverse transfers, other splits or different withdrawal orders; this workflow does not search
+for a globally optimal policy.
+
+## Opening dates and tax state
+
+`plan.startDate` must follow the capture's calendar date in Europe/Warsaw and be in 2027 or later.
+The default `REQUIRE_PREVIOUS_DAY_VALUES` policy requires both the capture and every selected
+holding's observation date to be the calendar day before the start. A weekend or older quote can
+therefore require an explicit decision even if Portfolio labels it `VALUED`.
+
+For a what-if scenario using today's balances at a future start, explicitly set
+`openingValuationPolicy` to `USE_CAPTURED_VALUES_UNCHANGED`. This carries the observed amounts
+forward unchanged; it projects no intervening prices, contributions, withdrawals or taxes.
+Tax state is still supplied separately for the actual simulation start. Neither policy allows
+backdating the capture or treating a capture as the opening of its own calendar day.
+
+Supply `portfolio.openingTaxState` and set `plan.taxStateAsOfDate` to the start date only after
+checking that it describes the beginning of that day. For the synthetic example:
+
+```json
+{
+  "realizedGainPln": "0",
+  "okiValueDaysPln": "0",
+  "liabilities": [
+    { "kind": "CAPITAL_GAINS", "taxYear": 2026, "dueDate": "2027-04-30", "amountPln": "40" }
+  ]
+}
+```
+
+Omission means unknown; `{}` explicitly declares zero year-to-date gains, zero accumulated OKI
+value-days and no outstanding liabilities. This is required even on 1 January, when prior-year
+tax can still be payable. Year-to-date accumulators must be zero on 1 January; prior-year taxes
+belong in `liabilities`. For a midyear start, provide gains and OKI value-days accumulated before
+that day. A selected existing OKI also requires its actual `okiOpenedOn` date.
+
+Declare any available prior-year loss in `plan.lossCarryforwardPln`; a positive amount returns
+`UNSUPPORTED_LOSS_CARRYFORWARD` because the engine cannot apply it yet. The default zero is an
+explicit scenario assumption to review. `plan.endDate` must be 31 December: the integrated workflow
+rejects a final partial year rather than using the engine's partial-year OKI closure convention.
+
 ## Using the adapter
 
 The implemented Kotlin adapter maps a caller-supplied JSON bundle. It is available through
@@ -208,9 +331,9 @@ and a SHA-256 hash of its decoded request. This digest covers the mapped request
 upstream fields ignored by decoding are not included. Keep the raw bundle and the comparison
 request to reproduce a result after prices, transactions, or tax assumptions change.
 
-Local verification uses synthetic data and a loopback fixture server only:
+Automated verification uses synthetic data and a loopback fixture server only:
 
 ```sh
 ./gradlew :portfolio-adapter:test
-python3 -m unittest discover -s scripts -p 'test_capture_portfolio.py' -v
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
 ```

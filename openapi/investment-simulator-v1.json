@@ -162,6 +162,64 @@
                     }
                 }
             }
+        },
+        "/v1/portfolio/analyses": {
+            "post": {
+                "operationId": "analyzePortfolio",
+                "summary": "Compare standard strategies for supplied Portfolio data and an investment plan",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PortfolioAnalysisRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Analysis report: COMPLETE, NEEDS_INPUT, or UNSUPPORTED; data gaps remain a successful structured response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PortfolioAnalysisResult"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON or request shape",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request exceeds the body size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be application/json",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -1514,6 +1572,246 @@
                     "valuationDates",
                     "requestSha256",
                     "acquisitionCostSources"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioAnalysisRequest": {
+                "type": "object",
+                "properties": {
+                    "portfolio": {
+                        "$ref": "#/components/schemas/PortfolioSnapshotRequest"
+                    },
+                    "plan": {
+                        "$ref": "#/components/schemas/PortfolioAnalysisPlan"
+                    }
+                },
+                "required": [
+                    "portfolio",
+                    "plan"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioAnalysisPlan": {
+                "type": "object",
+                "properties": {
+                    "startDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "assumptions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/YearAssumptions"
+                        }
+                    },
+                    "monthlyPlan": {
+                        "$ref": "#/components/schemas/MonthlyPlan"
+                    },
+                    "cashFlows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CashFlow"
+                        }
+                    },
+                    "withdrawalOrder": {
+                        "type": "string",
+                        "enum": [
+                            "TAXABLE_FIRST",
+                            "OKI_FIRST",
+                            "PROPORTIONAL"
+                        ]
+                    },
+                    "tradingFeeRate": {
+                        "type": "number"
+                    },
+                    "capitalGainsTaxRate": {
+                        "type": "number"
+                    },
+                    "minimumAdvantagePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "includeLedger": {
+                        "type": "boolean"
+                    },
+                    "openingValuationPolicy": {
+                        "type": "string",
+                        "enum": [
+                            "REQUIRE_PREVIOUS_DAY_VALUES",
+                            "USE_CAPTURED_VALUES_UNCHANGED"
+                        ]
+                    },
+                    "taxStateAsOfDate": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "lossCarryforwardPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "startDate",
+                    "endDate",
+                    "assumptions"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioAnalysisResult": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "COMPLETE",
+                            "NEEDS_INPUT",
+                            "UNSUPPORTED"
+                        ]
+                    },
+                    "dataGaps": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioDataGap"
+                        }
+                    },
+                    "strategyDescriptions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StrategyDescription"
+                        }
+                    },
+                    "assumptions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "source": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PortfolioSnapshotProvenance"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "resolvedRequest": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ComparisonRequest"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "comparison": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ComparisonResult"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "status",
+                    "dataGaps",
+                    "strategyDescriptions",
+                    "assumptions"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioDataGap": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "enum": [
+                            "MISSING_TAX_STATE",
+                            "TAX_STATE_DATE_MISMATCH",
+                            "MISSING_VERIFIED_PURCHASE_COST",
+                            "MISSING_OKI_OPENING_DATE",
+                            "SNAPSHOT_START_MISMATCH",
+                            "INVALID_SCENARIO",
+                            "UNSUPPORTED_LOSS_CARRYFORWARD",
+                            "UNSUPPORTED_FINAL_PARTIAL_YEAR",
+                            "UNSUPPORTED_SNAPSHOT"
+                        ]
+                    },
+                    "path": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "transactionId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "accountId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "code",
+                    "path",
+                    "message"
+                ],
+                "additionalProperties": false
+            },
+            "StrategyDescription": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "title",
+                    "description"
                 ],
                 "additionalProperties": false
             }

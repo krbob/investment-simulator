@@ -12,6 +12,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.ComparisonResult
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisRequest
+import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisResult
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotRequest
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotResult
 
@@ -24,6 +26,8 @@ fun openApiDocument(): String {
     val comparisonResult = schemas.schema(ComparisonResult.serializer().descriptor)
     val snapshotRequest = schemas.schema(PortfolioSnapshotRequest.serializer().descriptor)
     val snapshotResult = schemas.schema(PortfolioSnapshotResult.serializer().descriptor)
+    val analysisRequest = schemas.schema(PortfolioAnalysisRequest.serializer().descriptor)
+    val analysisResult = schemas.schema(PortfolioAnalysisResult.serializer().descriptor)
     val document = obj(
         "openapi" to str("3.1.0"),
         "info" to obj(
@@ -62,6 +66,15 @@ fun openApiDocument(): String {
                 snapshotResult,
                 error,
             )),
+            "/v1/portfolio/analyses" to obj("post" to operation(
+                "analyzePortfolio",
+                "Compare standard strategies for supplied Portfolio data and an investment plan",
+                analysisRequest,
+                analysisResult,
+                error,
+                successDescription = "Analysis report: COMPLETE, NEEDS_INPUT, or UNSUPPORTED; data gaps remain a successful structured response",
+                badRequestDescription = "Invalid JSON or request shape",
+            )),
         ),
         "components" to obj("schemas" to JsonObject(schemas.definitions)),
     )
@@ -74,6 +87,8 @@ private fun operation(
     requestSchema: JsonObject,
     responseSchema: JsonObject,
     errorSchema: JsonObject,
+    successDescription: String = "Successful calculation",
+    badRequestDescription: String = "Invalid JSON, input or unsupported portfolio data",
 ) = obj(
     "operationId" to str(id),
     "summary" to str(summary),
@@ -82,8 +97,8 @@ private fun operation(
         "content" to jsonContent(requestSchema),
     ),
     "responses" to obj(
-        "200" to response("Successful calculation", responseSchema),
-        "400" to response("Invalid JSON, input or unsupported portfolio data", errorSchema),
+        "200" to response(successDescription, responseSchema),
+        "400" to response(badRequestDescription, errorSchema),
         "413" to response("Request exceeds the body size limit", errorSchema),
         "415" to response("Content-Type must be application/json", errorSchema),
     ),
@@ -161,7 +176,7 @@ private class SchemaRegistry {
 
 private val DATE_FIELDS = setOf(
     "startDate", "endDate", "acquiredOn", "okiOpenedOn", "dueDate", "withdrawalFrom", "contributionUntil",
-    "date", "throughDate", "sourceAsOfDate", "tradeDate", "valuedAt",
+    "date", "throughDate", "sourceAsOfDate", "tradeDate", "valuedAt", "taxStateAsOfDate",
 )
 private val TIMESTAMP_FIELDS = setOf("exportedAt", "createdAt")
 
