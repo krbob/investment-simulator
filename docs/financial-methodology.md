@@ -20,11 +20,13 @@ rounded to cents when they occur. Taxable annual bases and taxes are each rounde
 3. Pay due taxes from cash; if necessary, sell assets in the strategy's withdrawal order.
 4. Pay requested net household withdrawals using the same funding rule. Record unmet spending
    as a shortfall rather than borrowing or creating money.
-5. Invest the unused part of today's contribution in the requested split. Opening cash remains
+5. On 1 January from `annualWithdrawalPlan.startDate`, calculate and fund that year's percentage
+   withdrawal from the remaining current portfolio, after the preceding flows and due taxes.
+6. Invest the unused part of today's contribution in the requested split. Opening cash remains
    an interest-free spending/tax buffer; it is not automatically invested.
-6. Apply the common daily equity return and the daily CPI factor.
-7. Accumulate OKI's end-of-day equity value and actual same-day deposit/withdrawal correction.
-8. At calendar year-end, assess PIT and OKI tax. Before a subsequent simulated year, create
+7. Apply the common daily equity return and the daily CPI factor.
+8. Accumulate OKI's end-of-day equity value and actual same-day deposit/withdrawal correction.
+9. At calendar year-end, assess PIT and OKI tax. Before a subsequent simulated year, create
    dated liabilities and clear the year-to-date accumulators.
 
 One-off cash flows occur on their given dates. Monthly flows occur on a day between 1 and 28.
@@ -32,6 +34,16 @@ One-off cash flows occur on their given dates. Monthly flows occur on a day betw
 amounts are expressed in purchasing power at `startDate`, including withdrawals beginning later.
 Two cash flows on the same day are netted in the household cash account before unused new money
 is invested. They create an OKI round trip only if money actually crosses the OKI boundary.
+
+An optional annual withdrawal plan uses a fraction of current taxable equity, OKI equity and
+outside cash, rounded to cents before multiplying by the rate and rounding the request to cents.
+It starts on 1 January and repeats each year, separately for each strategy. Taxes not yet due
+are not deducted from this gross market-value base. The withdrawal is net household spending;
+tax and trading fees consume additional assets through the normal funding mechanism.
+Fixed monthly spending cannot be combined with this plan; explicit one-off flows still apply.
+Monthly contributions stop at the earlier of their explicit cutoff and the day before annual
+withdrawals begin. A shortened simulation may end before the first annual withdrawal.
+See [retirement withdrawals](retirement-withdrawals.md) for examples and interpretation.
 
 ## Taxable account and migrations
 
@@ -107,10 +119,22 @@ explicit opening tax state, including on 1 January; see the [integration guide](
 Current-year liabilities remain payable even when their due date is beyond the simulation. A
 negative terminal net value is preserved; insolvency is never clamped to zero. Unmet spending
 and overdue tax identify an infeasible strategy, as does a negative terminal value after liabilities
-and hypothetical liquidation costs. Among feasible strategies, ranking maximizes
-real terminal net value. The baseline wins ties and remains preferred when an improvement does
+and hypothetical liquidation costs. Among feasible strategies, ranking maximizes the selected
+`comparisonObjective`. `AUTO` uses real terminal net value for fixed spending; with an annual
+withdrawal plan it uses cumulative real household spending plus real terminal net value.
+Each actual household payment is divided by CPI at payment and rounded to cents before summing.
+The total-benefit objective is that sum plus the reported real terminal net value. Withdrawn
+household cash receives no subsequent modeled investment return, and there is no time discount
+beyond CPI or utility weighting. The baseline wins ties and remains preferred when an improvement does
 not exceed `minimumAdvantagePln` in start-date purchasing power. If no strategy is feasible,
 the result reports the shortfall instead of presenting an investment recommendation as feasible.
+
+`advantageVsBaselinePln` retains its terminal-wealth meaning. `objectiveAdvantageVsBaselinePln`
+is the difference in the selected comparison values and drives the recommendation threshold.
+Annual percentage spending can shrink to zero without a funding shortfall; feasibility does not
+mean that spending meets a desired income floor. The annual payment history and cumulative real
+withdrawals are reported separately. There is no terminal sale at the end of accumulation;
+the analytical liquidation convention applies only at the end of the entire simulation.
 
 This first version does not estimate probabilities, parameter uncertainty or future changes to
 law. It omits carryforward losses, other investment income, foreign investor-level withholding,

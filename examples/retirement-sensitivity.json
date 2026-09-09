@@ -1,0 +1,437 @@
+{
+  "baseRequest": {
+    "startDate": "2027-01-01",
+    "endDate": "2076-12-31",
+    "initial": {
+      "taxableLots": [
+        {
+          "id": "existing-etf",
+          "acquiredOn": "2024-01-02",
+          "marketValuePln": "200000",
+          "costBasisPln": "120000"
+        }
+      ],
+      "taxState": {}
+    },
+    "assumptions": [
+      {
+        "year": 2027,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ESTABLISHED"
+      },
+      {
+        "year": 2028,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2029,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2030,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2031,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2032,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2033,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2034,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2035,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2036,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2037,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2038,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2039,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2040,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2041,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2042,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2043,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2044,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2045,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2046,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2047,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2048,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2049,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2050,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2051,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2052,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2053,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2054,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2055,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2056,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2057,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2058,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2059,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2060,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2061,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2062,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2063,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2064,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2065,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2066,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2067,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2068,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2069,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2070,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2071,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2072,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2073,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2074,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2075,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      },
+      {
+        "year": 2076,
+        "equityReturnRate": 0.07,
+        "inflationRate": 0.025,
+        "okiTaxRate": 0.0085,
+        "okiRateStatus": "ASSUMED"
+      }
+    ],
+    "strategies": [
+      {
+        "id": "keep-taxable",
+        "contributionToOkiFraction": 0.0
+      },
+      {
+        "id": "new-money-oki",
+        "contributionToOkiFraction": 1.0,
+        "withdrawalOrder": "OKI_FIRST"
+      },
+      {
+        "id": "split-new-money",
+        "contributionToOkiFraction": 0.5,
+        "withdrawalOrder": "PROPORTIONAL"
+      },
+      {
+        "id": "move-half",
+        "contributionToOkiFraction": 1.0,
+        "initialTransfer": {
+          "direction": "TAXABLE_TO_OKI",
+          "fraction": 0.5
+        },
+        "withdrawalOrder": "OKI_FIRST"
+      },
+      {
+        "id": "move-all",
+        "contributionToOkiFraction": 1.0,
+        "initialTransfer": {
+          "direction": "TAXABLE_TO_OKI",
+          "fraction": 1.0
+        },
+        "withdrawalOrder": "OKI_FIRST"
+      }
+    ],
+    "monthlyPlan": {
+      "contributionPln": "2000",
+      "indexContributions": true
+    },
+    "tradingFeeRate": 0.001,
+    "capitalGainsTaxRate": 0.19,
+    "baselineStrategyId": "keep-taxable",
+    "minimumAdvantagePln": "1000",
+    "includeLedger": false,
+    "annualWithdrawalPlan": {
+      "startDate": "2047-01-01",
+      "rate": 0.04
+    },
+    "comparisonObjective": "AUTO"
+  },
+  "axes": {
+    "equityReturnRateShifts": [
+      -0.02,
+      0,
+      0.02
+    ],
+    "inflationRateShifts": [
+      0
+    ],
+    "assumedOkiTaxRateShifts": [
+      -0.004,
+      0,
+      0.004
+    ],
+    "accumulationEndDates": [
+      "2036-12-31",
+      "2046-12-31"
+    ],
+    "withdrawalYears": 30
+  }
+}

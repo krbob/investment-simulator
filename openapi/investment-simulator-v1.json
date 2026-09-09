@@ -2,8 +2,8 @@
     "openapi": "3.1.0",
     "info": {
         "title": "Investment Simulator API",
-        "version": "0.1.0",
-        "description": "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. Bodies are limited to 2097152 bytes. The default listener is 127.0.0.1:8080."
+        "version": "0.2.0",
+        "description": "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. An annual withdrawal plan supports percentage withdrawals from current assets after accumulation; AUTO then compares real withdrawals plus real terminal wealth. Legacy terminal advantage fields retain their meaning. Bodies are limited to 2097152 bytes. The default listener is 127.0.0.1:8080."
     },
     "servers": [
         {
@@ -110,7 +110,7 @@
             "post": {
                 "operationId": "analyzeSensitivity",
                 "summary": "Compare a deterministic grid of additive rate shifts and shorter horizons",
-                "description": "Each axis supports at most 16 values. The grid supports at most 128 scenarios and 2000000 total simulated strategy-days. Opening tax-lot replays across scenarios and strategies are limited to 250000. Rate shifts are additive decimal fractions (0.01 = one percentage point); established OKI rates remain unchanged. Each horizon must end on 31 December and cannot extend beyond the base request. The entire grid is validated before simulation. Results group strategy summaries by horizon.",
+                "description": "Each axis supports at most 16 values. The grid supports at most 128 scenarios and 2000000 total simulated strategy-days. Opening tax-lot replays across scenarios and strategies are limited to 250000. Rate shifts are additive decimal fractions (0.01 = one percentage point); established OKI rates remain unchanged. Each horizon must end on 31 December and cannot extend beyond the base request. Use endDates to shorten the final horizon with a fixed annual withdrawal start, or accumulationEndDates plus withdrawalYears to vary accumulation with a constant retirement duration. These horizon modes are mutually exclusive. Accumulation horizons require an annualWithdrawalPlan and 1 to 50 withdrawalYears; each derived end must fit the complete base path. The entire grid is validated before simulation. Results group strategy summaries by final and accumulation horizon. Preferred strategies and transitions use comparisonObjective; terminal-value metrics remain available separately.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -366,6 +366,24 @@
                     },
                     "includeLedger": {
                         "type": "boolean"
+                    },
+                    "annualWithdrawalPlan": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/AnnualWithdrawalPlan"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "comparisonObjective": {
+                        "type": "string",
+                        "enum": [
+                            "AUTO",
+                            "REAL_TERMINAL_WEALTH",
+                            "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
+                        ]
                     }
                 },
                 "required": [
@@ -694,6 +712,22 @@
                 ],
                 "additionalProperties": false
             },
+            "AnnualWithdrawalPlan": {
+                "type": "object",
+                "properties": {
+                    "startDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "rate": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "startDate"
+                ],
+                "additionalProperties": false
+            },
             "ComparisonResult": {
                 "type": "object",
                 "properties": {
@@ -732,6 +766,14 @@
                         "items": {
                             "type": "string"
                         }
+                    },
+                    "comparisonObjective": {
+                        "type": "string",
+                        "enum": [
+                            "AUTO",
+                            "REAL_TERMINAL_WEALTH",
+                            "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
+                        ]
                     }
                 },
                 "required": [
@@ -884,6 +926,44 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/LedgerEvent"
+                        }
+                    },
+                    "realWithdrawalsPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realTotalBenefitPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "comparisonValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "objectiveAdvantageVsBaselinePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "annualWithdrawals": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AnnualWithdrawalResult"
                         }
                     }
                 },
@@ -1109,6 +1189,59 @@
                 ],
                 "additionalProperties": false
             },
+            "AnnualWithdrawalResult": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "portfolioValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "rate": {
+                        "type": "number"
+                    },
+                    "requestedPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "paidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "date",
+                    "portfolioValuePln",
+                    "rate",
+                    "requestedPln",
+                    "paidPln",
+                    "realPaidPln"
+                ],
+                "additionalProperties": false
+            },
             "SensitivityRequest": {
                 "type": "object",
                 "properties": {
@@ -1150,6 +1283,22 @@
                         "items": {
                             "type": "string"
                         }
+                    },
+                    "accumulationEndDates": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "withdrawalYears": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [],
@@ -1202,6 +1351,14 @@
                         "items": {
                             "type": "string"
                         }
+                    },
+                    "comparisonObjective": {
+                        "type": "string",
+                        "enum": [
+                            "AUTO",
+                            "REAL_TERMINAL_WEALTH",
+                            "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
+                        ]
                     }
                 },
                 "required": [
@@ -1215,7 +1372,8 @@
                     "scenarios",
                     "strategySummaries",
                     "transitions",
-                    "limitations"
+                    "limitations",
+                    "comparisonObjective"
                 ],
                 "additionalProperties": false
             },
@@ -1277,6 +1435,16 @@
                         "items": {
                             "$ref": "#/components/schemas/SensitivityStrategyResult"
                         }
+                    },
+                    "highestObjectiveStrategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -1288,7 +1456,8 @@
                     "preferredStrategyId",
                     "highestValueStrategyId",
                     "recommendation",
-                    "strategies"
+                    "strategies",
+                    "highestObjectiveStrategyId"
                 ],
                 "additionalProperties": false
             },
@@ -1306,6 +1475,17 @@
                     },
                     "endDate": {
                         "type": "string",
+                        "format": "date"
+                    },
+                    "accumulationEndDate": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
                         "format": "date"
                     }
                 },
@@ -1454,6 +1634,59 @@
                                 "type": "null"
                             }
                         ]
+                    },
+                    "comparisonValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "objectiveAdvantageVsBaselinePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "objectiveRegretVsBestFeasiblePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "realWithdrawalsPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realTotalBenefitPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "annualWithdrawals": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AnnualWithdrawalResult"
+                        }
                     }
                 },
                 "required": [
@@ -1473,7 +1706,13 @@
                     "capitalGainsTaxPaidPln",
                     "okiTaxPaidPln",
                     "tradingFeesPln",
-                    "initialTransfer"
+                    "initialTransfer",
+                    "comparisonValuePln",
+                    "objectiveAdvantageVsBaselinePln",
+                    "objectiveRegretVsBestFeasiblePln",
+                    "realWithdrawalsPaidPln",
+                    "realTotalBenefitPln",
+                    "annualWithdrawals"
                 ],
                 "additionalProperties": false
             },
@@ -1546,6 +1785,65 @@
                                 "type": "null"
                             }
                         ]
+                    },
+                    "accumulationEndDate": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "highestObjectiveScenarioCount": {
+                        "type": "integer"
+                    },
+                    "minimumObjectiveAdvantageVsBaselinePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumObjectiveAdvantageVsBaselinePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumObjectiveRegretVsBestFeasiblePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -1558,7 +1856,12 @@
                     "comparableToBaselineScenarioCount",
                     "minimumAdvantageVsBaselinePln",
                     "maximumAdvantageVsBaselinePln",
-                    "maximumRegretVsBestFeasiblePln"
+                    "maximumRegretVsBestFeasiblePln",
+                    "accumulationEndDate",
+                    "highestObjectiveScenarioCount",
+                    "minimumObjectiveAdvantageVsBaselinePln",
+                    "maximumObjectiveAdvantageVsBaselinePln",
+                    "maximumObjectiveRegretVsBestFeasiblePln"
                 ],
                 "additionalProperties": false
             },
@@ -1571,7 +1874,8 @@
                             "EQUITY_RETURN_RATE_SHIFT",
                             "INFLATION_RATE_SHIFT",
                             "ASSUMED_OKI_TAX_RATE_SHIFT",
-                            "END_DATE"
+                            "END_DATE",
+                            "ACCUMULATION_END_DATE"
                         ]
                     },
                     "kind": {
@@ -2227,6 +2531,24 @@
                         "description": "Exact decimal represented as a JSON string.",
                         "examples": [
                             "1000.00"
+                        ]
+                    },
+                    "annualWithdrawalPlan": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/AnnualWithdrawalPlan"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "comparisonObjective": {
+                        "type": "string",
+                        "enum": [
+                            "AUTO",
+                            "REAL_TERMINAL_WEALTH",
+                            "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
                         ]
                     }
                 },

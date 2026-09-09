@@ -144,5 +144,32 @@ jobs:
           assert rejected.returncode == 2, rejected.stderr
           assert not rejected.stdout, "Invalid sensitivity grid must not emit a partial report"
           assert rejected.stderr.startswith("Error:")
-          print("Distributed CLI verified migration tax, Portfolio analysis, sensitivity replay, rejected incomplete inputs and OpenAPI.")
+
+          retirement_request = json.loads(Path("examples/retirement-sensitivity.json").read_text())
+          retirement = run_cli("sensitivity", retirement_request)
+          assert retirement["comparisonObjective"] == "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"
+          assert retirement["scenarioCount"] == 18
+          assert not retirement["request"]["axes"]["endDates"]
+          assert retirement["request"]["axes"]["withdrawalYears"] == 30
+          retirement_json = temporary / "retirement-sensitivity.json"
+          retirement_json.write_text(json.dumps(retirement))
+          subprocess.run([
+              "python3", "scripts/render-sensitivity.py", "--input", str(retirement_json),
+              "--output", str(temporary / "retirement-sensitivity.html"),
+          ], check=True, timeout=30)
+          for scenario in (retirement["scenarios"][0], retirement["scenarios"][-1]):
+              resolved = run_cli("sensitivity-scenario", retirement["request"], extra_args=(scenario["id"],))
+              accumulation_year = int(scenario["coordinates"]["accumulationEndDate"][:4])
+              assert resolved["annualWithdrawalPlan"]["startDate"] == f"{accumulation_year + 1}-01-01"
+              assert resolved["endDate"] == f"{accumulation_year + 30}-12-31"
+              replay = run_cli("compare", resolved)
+              assert replay["comparisonObjective"] == retirement["comparisonObjective"]
+              replay_results = {item["strategyId"]: item for item in replay["results"]}
+              for summary in scenario["strategies"]:
+                  assert len(summary["annualWithdrawals"]) == 30
+                  assert summary["comparisonValuePln"] == summary["realTotalBenefitPln"]
+                  for key, value in summary.items():
+                      if key in replay_results[summary["strategyId"]]:
+                          assert value == replay_results[summary["strategyId"]][key], f"Retirement replay changed {key}"
+          print("Distributed CLI verified migration tax, Portfolio analysis, sensitivity and retirement replay, validation and OpenAPI.")
           PY

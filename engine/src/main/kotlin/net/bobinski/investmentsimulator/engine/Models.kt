@@ -43,7 +43,16 @@ data class ComparisonRequest(
     val baselineStrategyId: String,
     val minimumAdvantagePln: BigDecimal = BigDecimal("100"),
     val includeLedger: Boolean = false,
+    val annualWithdrawalPlan: AnnualWithdrawalPlan? = null,
+    val comparisonObjective: ComparisonObjective = ComparisonObjective.AUTO,
 )
+
+/** Annual net spending from current modeled market assets; startDate is 1 January after accumulation. */
+@Serializable
+data class AnnualWithdrawalPlan(val startDate: String, val rate: Double = 0.04)
+
+@Serializable
+enum class ComparisonObjective { AUTO, REAL_TERMINAL_WEALTH, REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH }
 
 /** A single accumulating global equity exposure, one taxable account and at most one OKI. */
 @Serializable
@@ -132,6 +141,7 @@ data class ComparisonResult(
     val explanation: String,
     val results: List<StrategyResult>,
     val limitations: List<String>,
+    val comparisonObjective: ComparisonObjective = ComparisonObjective.REAL_TERMINAL_WEALTH,
 )
 
 @Serializable
@@ -157,6 +167,21 @@ data class StrategyResult(
     val initialTransfer: TransferResult?,
     val yearly: List<YearResult>,
     val ledger: List<LedgerEvent>,
+    val realWithdrawalsPaidPln: BigDecimal = BigDecimal.ZERO,
+    val realTotalBenefitPln: BigDecimal = BigDecimal.ZERO,
+    val comparisonValuePln: BigDecimal = BigDecimal.ZERO,
+    val objectiveAdvantageVsBaselinePln: BigDecimal = BigDecimal.ZERO,
+    val annualWithdrawals: List<AnnualWithdrawalResult> = emptyList(),
+)
+
+@Serializable
+data class AnnualWithdrawalResult(
+    val date: String,
+    val portfolioValuePln: BigDecimal,
+    val rate: Double,
+    val requestedPln: BigDecimal,
+    val paidPln: BigDecimal,
+    val realPaidPln: BigDecimal,
 )
 
 @Serializable

@@ -16,6 +16,9 @@ data class SensitivityAxes(
     val assumedOkiTaxRateShifts: List<Double> = listOf(0.0),
     // Empty means the base end date. Horizons can only shorten the supplied path.
     val endDates: List<String> = emptyList(),
+    // Alternative to endDates: vary accumulation while preserving a fixed withdrawal duration.
+    val accumulationEndDates: List<String> = emptyList(),
+    val withdrawalYears: Int? = null,
 )
 
 @Serializable
@@ -24,6 +27,7 @@ data class SensitivityCoordinates(
     val inflationRateShift: Double,
     val assumedOkiTaxRateShift: Double,
     val endDate: String,
+    val accumulationEndDate: String? = null,
 )
 
 @Serializable
@@ -39,6 +43,7 @@ data class SensitivityResult(
     val strategySummaries: List<SensitivityStrategySummary>,
     val transitions: List<SensitivityTransition>,
     val limitations: List<String>,
+    val comparisonObjective: ComparisonObjective,
 )
 
 @Serializable
@@ -53,6 +58,7 @@ data class SensitivityScenario(
     val highestValueStrategyId: String?,
     val recommendation: Recommendation,
     val strategies: List<SensitivityStrategyResult>,
+    val highestObjectiveStrategyId: String?,
 )
 
 @Serializable
@@ -74,6 +80,12 @@ data class SensitivityStrategyResult(
     val okiTaxPaidPln: BigDecimal,
     val tradingFeesPln: BigDecimal,
     val initialTransfer: TransferResult?,
+    val comparisonValuePln: BigDecimal,
+    val objectiveAdvantageVsBaselinePln: BigDecimal,
+    val objectiveRegretVsBestFeasiblePln: BigDecimal?,
+    val realWithdrawalsPaidPln: BigDecimal,
+    val realTotalBenefitPln: BigDecimal,
+    val annualWithdrawals: List<AnnualWithdrawalResult>,
 )
 
 /** Summaries group by horizon so that different durations are never ranked by pooled wealth. */
@@ -89,10 +101,15 @@ data class SensitivityStrategySummary(
     val minimumAdvantageVsBaselinePln: BigDecimal?,
     val maximumAdvantageVsBaselinePln: BigDecimal?,
     val maximumRegretVsBestFeasiblePln: BigDecimal?,
+    val accumulationEndDate: String?,
+    val highestObjectiveScenarioCount: Int,
+    val minimumObjectiveAdvantageVsBaselinePln: BigDecimal?,
+    val maximumObjectiveAdvantageVsBaselinePln: BigDecimal?,
+    val maximumObjectiveRegretVsBestFeasiblePln: BigDecimal?,
 )
 
 @Serializable
-enum class SensitivityAxis { EQUITY_RETURN_RATE_SHIFT, INFLATION_RATE_SHIFT, ASSUMED_OKI_TAX_RATE_SHIFT, END_DATE }
+enum class SensitivityAxis { EQUITY_RETURN_RATE_SHIFT, INFLATION_RATE_SHIFT, ASSUMED_OKI_TAX_RATE_SHIFT, END_DATE, ACCUMULATION_END_DATE }
 
 @Serializable
 enum class SensitivityTransitionKind {

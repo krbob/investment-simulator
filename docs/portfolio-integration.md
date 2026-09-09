@@ -11,6 +11,12 @@ The portfolio supplies opening positions; the plan supplies dates, annual return
 assumptions, contributions, withdrawals and fees. The same Kotlin service handles the CLI and
 `POST /v1/portfolio/analyses` without network access.
 
+For retirement spending, `plan.annualWithdrawalPlan` supplies the first annual payment date and
+fraction of the current portfolio (default 4%). `plan.endDate` includes the full withdrawal period;
+`plan.comparisonObjective` defaults to `AUTO`, which includes cumulative real spending for this
+policy. These values pass through to `resolvedRequest` for exact replay and sensitivity analysis.
+See [annual retirement withdrawals](retirement-withdrawals.md) for timing and cash-flow semantics.
+
 Run the complete synthetic example:
 
 ```sh

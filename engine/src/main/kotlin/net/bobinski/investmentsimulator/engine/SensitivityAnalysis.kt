@@ -7,7 +7,7 @@ import java.time.temporal.ChronoUnit
 
 /** Bounded deterministic grid evaluation; all financial calculations stay in SimulationEngine. */
 object SensitivityAnalysis {
-    const val VERSION = "0.1.0"
+    const val VERSION = "0.2.0"
     const val MAX_AXIS_VALUES = 16
     const val MAX_SCENARIOS = 128
     const val MAX_STRATEGY_DAYS = 2_000_000L
@@ -16,13 +16,15 @@ object SensitivityAnalysis {
     fun analyze(request: SensitivityRequest): SensitivityResult {
         val prepared = prepare(request)
         var engineLimitations = emptyList<String>()
+        val comparisonObjective = effectiveComparisonObjective(prepared.request.baseRequest)
         val scenarios = prepared.cases.map { case ->
             val comparison = SimulationEngine.compare(case.request)
             if (engineLimitations.isEmpty()) engineLimitations = comparison.limitations
             val feasible = comparison.results.filter(::isFeasible)
-            val best = feasible.sortedWith(compareByDescending<StrategyResult> { it.realNetLiquidationValuePln }
-                .thenBy { if (it.strategyId == comparison.baselineStrategyId) 0 else 1 }
-                .thenBy { it.strategyId }).firstOrNull()
+            fun bestBy(metric: (StrategyResult) -> BigDecimal) = feasible.sortedWith(compareByDescending(metric)
+                .thenBy { if (it.strategyId == comparison.baselineStrategyId) 0 else 1 }.thenBy { it.strategyId }).firstOrNull()
+            val best = bestBy { it.realNetLiquidationValuePln }
+            val bestObjective = bestBy { it.comparisonValuePln }
             SensitivityScenario(
                 id = case.id,
                 coordinates = case.coordinates,
@@ -42,8 +44,12 @@ object SensitivityAnalysis {
                         value.contributionsPln, value.withdrawalsPaidPln, value.withdrawalShortfallPln,
                         value.unpaidTaxPln, value.outstandingTaxPln, value.liquidationTaxPln, value.liquidationFeesPln,
                         value.capitalGainsTaxPaidPln, value.okiTaxPaidPln, value.tradingFeesPln, value.initialTransfer,
+                        value.comparisonValuePln, value.objectiveAdvantageVsBaselinePln,
+                        if (bestObjective != null && isFeasible(value)) bestObjective.comparisonValuePln - value.comparisonValuePln else null,
+                        value.realWithdrawalsPaidPln, value.realTotalBenefitPln, value.annualWithdrawals,
                     )
                 },
+                highestObjectiveStrategyId = bestObjective?.strategyId,
             )
         }
         val baselineId = prepared.request.baseRequest.baselineStrategyId
@@ -56,13 +62,14 @@ object SensitivityAnalysis {
             listOf(
                 "This is a finite deterministic grid, not a forecast or a probability distribution. Counts weight every requested grid cell equally, including cells whose OKI shift has no effect before the first ASSUMED year.",
                 "Rate shifts are additive fractional units: 0.01 means one percentage point. Return and inflation shifts apply to each retained year; OKI shifts apply only to years declared ASSUMED. ESTABLISHED OKI rates remain unchanged. No rate is clamped or derived from inflation.",
-                "Summaries are grouped by end date. Do not rank different horizons by pooled terminal wealth. Indexed contributions and withdrawals change with inflation under the supplied household plan.",
-                "Horizon endpoints are 31 December and cannot extend the supplied base path. Monthly plan dates stay fixed, dated cash flows beyond each horizon are omitted, and opening tax liabilities are retained even if due after the horizon.",
-                "Preferred counts include the engine's minimum real-PLN advantage threshold and baseline tie policy. Highest-value counts use feasible terminal value before that threshold; baseline then strategy ID break ties. An all-infeasible scenario has no winner.",
-                "Advantage ranges include only cells where both strategy and baseline are feasible. Regret is the difference from the highest feasible real terminal value in the same cell and is absent for infeasible strategies.",
-                "Transitions join adjacent sampled coordinates with other axes fixed. They bracket observed changes, not exact thresholds, monotonic behavior or all possible crossings between samples. Baseline and minimum-advantage crossings require both compared strategies to be feasible at both endpoints.",
+                "Summaries are grouped by simulation end date and accumulation end date. Do not rank different horizons by pooled wealth. Indexed contributions and withdrawals change with inflation under the supplied household plan.",
+                "Horizon endpoints are 31 December and cannot extend the supplied base path. In endDates mode the annual withdrawal start remains fixed. In accumulationEndDates mode annual withdrawals begin the following 1 January for withdrawalYears complete years; monthly contributions stop then or at an earlier explicit contributionUntil. Dated cash flows beyond each horizon are omitted and opening tax liabilities remain even if due later.",
+                "Preferred counts apply the resolved comparison objective, minimum real-PLN advantage threshold and baseline tie policy. Highest-objective counts rank feasible objective values before that threshold; highest-value counts retain real terminal wealth. Baseline then strategy ID break ties. An all-infeasible scenario has no winner.",
+                "Advantage ranges include only cells where both strategy and baseline are feasible. Terminal advantage and regret fields retain terminal-wealth semantics; objective fields use the resolved comparison objective. Both regrets are absent for infeasible strategies.",
+                "Transitions join adjacent sampled coordinates with other axes fixed. Accumulation transitions move the withdrawal start and final simulation end together. Break-even and minimum-advantage crossings use objective advantage and require strategy and baseline feasibility at both endpoints. They bracket observed changes, not exact thresholds, monotonic behavior or all crossings between samples.",
                 "The normalized request and stable scenario IDs reproduce each cell with sensitivity-scenario. Ledgers are disabled for grid evaluation; use compare on a resolved scenario for yearly details or an explicitly enabled ledger.",
             ) + engineLimitations,
+            comparisonObjective,
         )
     }
 
@@ -72,6 +79,7 @@ object SensitivityAnalysis {
 
     private data class Case(val id: String, val coordinates: SensitivityCoordinates, val request: ComparisonRequest)
     private data class Prepared(val request: SensitivityRequest, val cases: List<Case>, val strategyDays: Long)
+    private data class Horizon(val end: LocalDate, val accumulationEnd: LocalDate? = null)
 
     private fun prepare(input: SensitivityRequest): Prepared {
         val base = input.baseRequest.copy(includeLedger = false)
@@ -93,31 +101,56 @@ object SensitivityAnalysis {
         require(oki.all { it == 0.0 } || base.assumptions.any { it.okiRateStatus == AssumptionStatus.ASSUMED }) {
             "A nonzero assumedOkiTaxRateShift requires at least one ASSUMED OKI year in the base path."
         }
-        val ends = input.axes.endDates.ifEmpty { listOf(base.endDate) }
-        require(ends.size in 1..MAX_AXIS_VALUES && ends.distinct().size == ends.size) {
-            "endDates must contain at most $MAX_AXIS_VALUES unique dates."
+        val accumulationMode = input.axes.accumulationEndDates.isNotEmpty()
+        require(!accumulationMode || input.axes.endDates.isEmpty()) { "endDates and accumulationEndDates are mutually exclusive." }
+        require(accumulationMode == (input.axes.withdrawalYears != null)) {
+            "Supply accumulationEndDates and withdrawalYears together, or use endDates without withdrawalYears."
         }
-        ends.forEach {
-            val end = date(it)
-            require(end in start..baseEnd && end.monthValue == 12 && end.dayOfMonth == 31) {
-                "Every sensitivity end date must be 31 December between startDate and the base endDate."
+        fun horizonDates(values: List<String>, name: String): List<LocalDate> {
+            require(values.size in 1..MAX_AXIS_VALUES && values.distinct().size == values.size) {
+                "$name must contain 1 to $MAX_AXIS_VALUES unique dates."
             }
+            return values.map {
+                val end = date(it)
+                require(end in start..baseEnd && end.monthValue == 12 && end.dayOfMonth == 31) {
+                    "Every $name value must be 31 December between startDate and the base endDate."
+                }
+                end
+            }.sorted()
         }
-        val axes = SensitivityAxes(returns, inflation, oki, ends.sorted())
-        val scenarioCount = returns.size.toLong() * inflation.size * oki.size * ends.size
+        val horizons = if (accumulationMode) {
+            require(base.annualWithdrawalPlan != null) { "Accumulation horizons require baseRequest.annualWithdrawalPlan." }
+            val years = requireNotNull(input.axes.withdrawalYears)
+            require(years in 1..50) { "withdrawalYears must be between 1 and 50." }
+            horizonDates(input.axes.accumulationEndDates, "accumulationEndDates").map { accumulationEnd ->
+                val end = accumulationEnd.plusDays(1).plusYears(years.toLong()).minusDays(1)
+                require(end <= baseEnd) { "Accumulation horizon plus withdrawalYears exceeds the supplied base endDate." }
+                Horizon(end, accumulationEnd)
+            }
+        } else horizonDates(input.axes.endDates.ifEmpty { listOf(base.endDate) }, "endDates").map { Horizon(it) }
+        val axes = SensitivityAxes(
+            returns, inflation, oki,
+            endDates = if (accumulationMode) emptyList() else horizons.map { it.end.toString() },
+            accumulationEndDates = if (accumulationMode) horizons.map { it.accumulationEnd.toString() } else emptyList(),
+            withdrawalYears = input.axes.withdrawalYears,
+        )
+        val scenarioCount = returns.size.toLong() * inflation.size * oki.size * horizons.size
         require(scenarioCount <= MAX_SCENARIOS) { "Sensitivity grid exceeds the $MAX_SCENARIOS scenario limit." }
-        val strategyDays = ends.sumOf { ChronoUnit.DAYS.between(start, date(it)) + 1 } *
+        val strategyDays = horizons.sumOf { ChronoUnit.DAYS.between(start, it.end) + 1 } *
             returns.size * inflation.size * oki.size * base.strategies.size
         require(strategyDays <= MAX_STRATEGY_DAYS) { "Sensitivity grid exceeds the $MAX_STRATEGY_DAYS strategy-day limit; reduce axes, strategies or horizons." }
         require(scenarioCount * base.strategies.size * base.initial.taxableLots.size <= MAX_OPENING_LOT_REPLAYS) {
             "Sensitivity grid exceeds the $MAX_OPENING_LOT_REPLAYS opening-lot replay limit; reduce the grid or strategies."
         }
         val cases = buildList {
-            for (end in axes.endDates) for (cpi in inflation) for (rate in oki) for (equity in returns) {
-                val endDate = date(end)
-                val coordinates = SensitivityCoordinates(equity, cpi, rate, end)
+            for (horizon in horizons) for (cpi in inflation) for (rate in oki) for (equity in returns) {
+                val endDate = horizon.end
+                val coordinates = SensitivityCoordinates(equity, cpi, rate, endDate.toString(), horizon.accumulationEnd?.toString())
                 val resolved = base.copy(
-                    endDate = end,
+                    endDate = endDate.toString(),
+                    annualWithdrawalPlan = if (horizon.accumulationEnd != null)
+                        requireNotNull(base.annualWithdrawalPlan).copy(startDate = horizon.accumulationEnd.plusDays(1).toString())
+                    else base.annualWithdrawalPlan,
                     assumptions = base.assumptions.filter { it.year <= endDate.year }.map { year ->
                         year.copy(
                             equityReturnRate = shifted(year.equityReturnRate, equity),
@@ -153,19 +186,22 @@ object SensitivityAnalysis {
         result.unpaidTaxPln.signum() == 0 && result.netLiquidationValuePln.signum() >= 0
 
     private fun summarize(scenarios: List<SensitivityScenario>, base: ComparisonRequest): List<SensitivityStrategySummary> =
-        scenarios.groupBy { it.coordinates.endDate }.flatMap { (end, cells) ->
+        scenarios.groupBy { it.coordinates.endDate to it.coordinates.accumulationEndDate }.flatMap { (horizon, cells) ->
             base.strategies.map { strategy ->
                 val values = cells.map { it.strategies.first { value -> value.strategyId == strategy.id } }
                 val comparable = cells.filter { cell ->
                     cell.strategies.first { it.strategyId == strategy.id }.feasible &&
                         cell.strategies.first { it.strategyId == base.baselineStrategyId }.feasible
-                }.map { cell -> cell.strategies.first { it.strategyId == strategy.id }.advantageVsBaselinePln }
+                }.map { cell -> cell.strategies.first { it.strategyId == strategy.id } }
                 SensitivityStrategySummary(
-                    end, strategy.id, cells.size, values.count { it.feasible },
+                    horizon.first, strategy.id, cells.size, values.count { it.feasible },
                     cells.count { it.preferredStrategyId == strategy.id },
                     cells.count { it.highestValueStrategyId == strategy.id }, comparable.size,
-                    comparable.minOrNull(), comparable.maxOrNull(),
+                    comparable.minOfOrNull { it.advantageVsBaselinePln }, comparable.maxOfOrNull { it.advantageVsBaselinePln },
                     values.mapNotNull { it.regretVsBestFeasiblePln }.maxOrNull(),
+                    horizon.second, cells.count { it.highestObjectiveStrategyId == strategy.id },
+                    comparable.minOfOrNull { it.objectiveAdvantageVsBaselinePln }, comparable.maxOfOrNull { it.objectiveAdvantageVsBaselinePln },
+                    values.mapNotNull { it.objectiveRegretVsBestFeasiblePln }.maxOrNull(),
                 )
             }
         }
@@ -181,7 +217,13 @@ object SensitivityAnalysis {
                 next(axes.equityReturnRateShifts, coordinate.equityReturnRateShift)?.let { SensitivityAxis.EQUITY_RETURN_RATE_SHIFT to coordinate.copy(equityReturnRateShift = it) },
                 next(axes.inflationRateShifts, coordinate.inflationRateShift)?.let { SensitivityAxis.INFLATION_RATE_SHIFT to coordinate.copy(inflationRateShift = it) },
                 next(axes.assumedOkiTaxRateShifts, coordinate.assumedOkiTaxRateShift)?.let { SensitivityAxis.ASSUMED_OKI_TAX_RATE_SHIFT to coordinate.copy(assumedOkiTaxRateShift = it) },
-                next(axes.endDates, coordinate.endDate)?.let { SensitivityAxis.END_DATE to coordinate.copy(endDate = it) },
+                if (coordinate.accumulationEndDate != null)
+                    next(axes.accumulationEndDates, coordinate.accumulationEndDate)?.let {
+                        SensitivityAxis.ACCUMULATION_END_DATE to coordinate.copy(
+                            accumulationEndDate = it, endDate = date(it).plusYears(requireNotNull(axes.withdrawalYears).toLong()).toString(),
+                        )
+                    }
+                else next(axes.endDates, coordinate.endDate)?.let { SensitivityAxis.END_DATE to coordinate.copy(endDate = it) },
             )
             for ((axis, neighbor) in neighbors) {
                 val to = byCoordinate.getValue(neighbor)
@@ -197,10 +239,10 @@ object SensitivityAnalysis {
                     val other = to.strategies.first { it.strategyId == value.strategyId }
                     if (value.feasible != other.feasible) transition(SensitivityTransitionKind.FEASIBILITY_CHANGE, value.strategyId)
                     if (value.strategyId == baselineId || !value.feasible || !other.feasible || !baselineFrom.feasible || !baselineTo.feasible) continue
-                    if (value.advantageVsBaselinePln.signum() != other.advantageVsBaselinePln.signum()) {
+                    if (value.objectiveAdvantageVsBaselinePln.signum() != other.objectiveAdvantageVsBaselinePln.signum()) {
                         transition(SensitivityTransitionKind.BASELINE_BREAK_EVEN, value.strategyId)
                     }
-                    if ((value.advantageVsBaselinePln > threshold) != (other.advantageVsBaselinePln > threshold)) {
+                    if ((value.objectiveAdvantageVsBaselinePln > threshold) != (other.objectiveAdvantageVsBaselinePln > threshold)) {
                         transition(SensitivityTransitionKind.MINIMUM_ADVANTAGE_CROSSING, value.strategyId)
                     }
                 }

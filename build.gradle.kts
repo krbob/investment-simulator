@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = "net.bobinski.investmentsimulator"
-    version = "0.1.0-SNAPSHOT"
+    version = "0.2.0-SNAPSHOT"
 
     pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
         extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {

@@ -135,6 +135,8 @@ object PortfolioAnalysisService {
             baselineStrategyId = "keep-taxable",
             minimumAdvantagePln = plan.minimumAdvantagePln,
             includeLedger = plan.includeLedger,
+            annualWithdrawalPlan = plan.annualWithdrawalPlan,
+            comparisonObjective = plan.comparisonObjective,
         )
         val comparison = try {
             SimulationEngine.compare(resolved)
@@ -145,7 +147,10 @@ object PortfolioAnalysisService {
         val assumptions = listOf(
             "The selected account roles and accumulating global equity exposure are declared by the caller; the engine applies no OKI asset allowance.",
             "Opening tax state describes the beginning of ${plan.taxStateAsOfDate}. Missing upstream tax attributes have not been inferred from accounting FX or taxes already paid.",
-            "Every strategy uses the same ${plan.withdrawalOrder} funding order, contributions and requested net spending. Unused opening cash remains a spending/tax buffer.",
+            if (plan.annualWithdrawalPlan == null)
+                "Every strategy uses the same ${plan.withdrawalOrder} funding order, contributions and requested net spending. Unused opening cash remains a spending/tax buffer."
+            else "Every strategy uses the same ${plan.withdrawalOrder} funding order and annual withdrawal rate. Annual requested spending depends on each strategy's current assets; monthly contributions stop when annual withdrawals begin. Unused opening cash remains a spending/tax buffer.",
+            "Strategies are compared using ${comparison.comparisonObjective}; nominal and real terminal values remain available separately.",
             if (plan.openingValuationPolicy == OpeningValuationPolicy.USE_CAPTURED_VALUES_UNCHANGED)
                 "Values from capture $sourceDate and holding observations ${mapped.source.valuationDates.joinToString()} are reused unchanged at ${plan.startDate}. No prices, contributions or taxes between capture and start are projected; tax state is supplied separately for the start."
             else "Opening balances use the preceding calendar day's capture and holding observations; no extra day of returns is inserted before the simulation.",

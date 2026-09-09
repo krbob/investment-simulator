@@ -6,6 +6,12 @@ where their advantage changes sign, and how much terminal value a feasible strat
 relative to the best feasible candidate in each cell. It performs no forecasting, random sampling,
 automatic market-data fetching, or global policy optimization.
 
+For annual percentage withdrawals, the selected objective can include cumulative real spending
+as well as residual wealth. To compare the **accumulation horizon followed by a withdrawal
+period**, use `accumulationEndDates` with `withdrawalYears`; see
+[retirement withdrawals](retirement-withdrawals.md). The original `endDates` mode continues to
+mean the end of the entire simulation.
+
 ## Run an analysis
 
 ```sh
@@ -58,6 +64,7 @@ This is the `axes` object, not a complete request. The generated
 | `inflationRateShifts` | Add the shift to every retained year's inflation; the engine also changes indexed cash flows and real-value conversion |
 | `assumedOkiTaxRateShifts` | Add the shift only to retained years labeled `ASSUMED`; never change `ESTABLISHED` years |
 | `endDates` | End on a supplied 31 December between the original start and original end |
+| `accumulationEndDates` | Alternative to `endDates`: start annual withdrawals the next 1 January and simulate `withdrawalYears` complete years |
 
 Shifts are **additive fractional rate units**: `0.01` is one percentage point. For example,
 7% plus `-0.02` becomes 5%, and an assumed 0.85% plus `0.004` becomes 1.25%. Annual variation
@@ -69,6 +76,10 @@ Each rate axis defaults to `[0]`; omitted or empty `endDates` means the base end
 rate arrays must be nonempty. Values must be finite and unique, including equivalent positive
 and negative zero. Axes are sorted for stable scenario IDs, independent of input array order.
 The base scenario itself is included only if the requested coordinates contain it.
+
+Accumulation mode requires an annual withdrawal plan and `withdrawalYears` between 1 and 50.
+The base path must cover each derived final date. Its normalized `endDates` is empty, while
+coordinates carry both the chosen `accumulationEndDate` and actual simulation `endDate`.
 
 ## Horizons and household plans
 
@@ -96,9 +107,10 @@ cell, `preservedEstablishedOkiYears` and `shiftedAssumedOkiYears` show exactly w
 were protected or shifted. A shorter cell with no assumed years can be unchanged by the OKI axis;
 such cells remain separate, equally weighted grid samples and are disclosed by an empty shifted list.
 
-`preferredStrategyId` follows the comparison engine's minimum-advantage threshold and baseline
-tie preference. `highestValueStrategyId` selects the highest feasible real terminal value before
-that threshold; baseline then strategy ID break ties. Both are null if every strategy is infeasible.
+`preferredStrategyId` follows the resolved `comparisonObjective`, minimum-advantage threshold and
+baseline tie preference. `highestObjectiveStrategyId` selects the best feasible objective value
+before that threshold. `highestValueStrategyId` retains highest feasible real terminal value.
+Baseline then strategy ID break ties. All are null if every strategy is infeasible.
 There is no aggregate recommendation for the whole grid.
 
 Feasibility requires no unpaid requested withdrawals, no overdue tax, and a nonnegative terminal
@@ -111,17 +123,27 @@ contributions, withdrawals, paid and outstanding tax, liquidation adjustments, t
 initial migration figures. The migration's estimated additional PIT is a liability estimate;
 it is not added again to tax already included by the accounting engine.
 
+Version 0.2 also includes real cumulative spending, total real benefit, objective value/advantage
+and annual percentage-withdrawal history. `advantageVsBaselinePln` retains terminal-wealth
+semantics; `objectiveAdvantageVsBaselinePln` drives the decision. The HTML report identifies the
+objective and presents spending and remaining capital separately.
+
 `regretVsBestFeasiblePln` is the highest feasible real terminal value minus the candidate's value
 in the **same cell**. It is null for an infeasible candidate. A large
 worst regret means the strategy gives up considerable value in at least one tested case; it is
 not an expected loss or a risk probability.
+`objectiveRegretVsBestFeasiblePln` instead measures the gap to the best feasible objective value
+in that same cell; objective and terminal regret can differ under annual percentage spending.
 
-Strategy summaries are grouped by horizon. They report counts of feasible cells, preferred cells,
+Strategy summaries are grouped by simulation end and accumulation end. They report counts of feasible cells, preferred cells,
 highest-value cells, and cells where both strategy and baseline are feasible. Advantage ranges
 use only that last comparable subset; regret ranges use feasible cells. Review feasibility counts
 alongside ranges: excluded infeasible cases are not evidence of a safe strategy.
 Counts cover all inflation/return/OKI coordinates for the horizon, not just the displayed map slice.
 They weight sampled grid cells equally and must not be interpreted as probabilities or confidence.
+The new highest-objective count and objective advantage/regret ranges are separate from the
+original terminal-value metrics. In accumulation mode, every group includes the requested full
+withdrawal period after its own accumulation endpoint.
 
 ## Sampled transition brackets
 
@@ -129,8 +151,8 @@ The service compares adjacent points along each sorted axis while holding the ot
 Each transition links two scenario IDs and identifies one of these observations:
 
 - `PREFERRED_STRATEGY_CHANGE`: two feasible recommendations select different strategies;
-- `BASELINE_BREAK_EVEN`: a nonbaseline strategy's real advantage changes sign or touches zero;
-- `MINIMUM_ADVANTAGE_CROSSING`: its advantage crosses the strict `>` decision threshold;
+- `BASELINE_BREAK_EVEN`: a nonbaseline strategy's objective advantage changes sign or touches zero;
+- `MINIMUM_ADVANTAGE_CROSSING`: its objective advantage crosses the strict `>` decision threshold;
 - `FEASIBILITY_CHANGE`: a strategy becomes feasible or infeasible.
 
 Financial advantage transitions require both the strategy and the baseline to be feasible at
@@ -138,6 +160,8 @@ both endpoints. The same interval may have multiple kinds of transition. No exac
 interpolated: taxes are rounded, strategy outcomes can be nonmonotonic, and multiple crossings
 may lie between samples. No reported transition does not establish stability between points.
 Refine the selected axis around an observed bracket to investigate it more closely.
+An `ACCUMULATION_END_DATE` transition moves annual withdrawal start and final simulation end
+together while holding the number of withdrawal years constant; the other rate axes stay fixed.
 
 ## Reproduce a single cell
 

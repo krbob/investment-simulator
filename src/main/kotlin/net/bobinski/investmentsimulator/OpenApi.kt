@@ -37,11 +37,13 @@ fun openApiDocument(): String {
         "openapi" to str("3.1.0"),
         "info" to obj(
             "title" to str("Investment Simulator API"),
-            "version" to str("0.1.0"),
+            "version" to str("0.2.0"),
             "description" to str(
                 "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. " +
                     "All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). " +
                     "Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. " +
+                    "An annual withdrawal plan supports percentage withdrawals from current assets after accumulation; " +
+                    "AUTO then compares real withdrawals plus real terminal wealth. Legacy terminal advantage fields retain their meaning. " +
                     "Bodies are limited to $MAX_REQUEST_BYTES bytes. The default listener is 127.0.0.1:8080.",
             ),
         ),
@@ -78,7 +80,11 @@ fun openApiDocument(): String {
                     "Opening tax-lot replays across scenarios and strategies are limited to ${SensitivityAnalysis.MAX_OPENING_LOT_REPLAYS}. " +
                     "Rate shifts are additive decimal fractions (0.01 = one percentage point); established OKI rates remain unchanged. " +
                     "Each horizon must end on 31 December and cannot extend beyond the base request. " +
-                    "The entire grid is validated before simulation. Results group strategy summaries by horizon.",
+                    "Use endDates to shorten the final horizon with a fixed annual withdrawal start, or accumulationEndDates plus withdrawalYears " +
+                    "to vary accumulation with a constant retirement duration. These horizon modes are mutually exclusive. " +
+                    "Accumulation horizons require an annualWithdrawalPlan and 1 to 50 withdrawalYears; each derived end must fit the complete base path. " +
+                    "The entire grid is validated before simulation. Results group strategy summaries by final and accumulation horizon. " +
+                    "Preferred strategies and transitions use comparisonObjective; terminal-value metrics remain available separately.",
             )),
             "/v1/portfolio/snapshots" to obj("post" to operation(
                 "importPortfolioSnapshot",
@@ -199,7 +205,7 @@ private class SchemaRegistry {
 
 private val DATE_FIELDS = setOf(
     "startDate", "endDate", "acquiredOn", "okiOpenedOn", "dueDate", "withdrawalFrom", "contributionUntil",
-    "date", "throughDate", "sourceAsOfDate", "tradeDate", "valuedAt", "taxStateAsOfDate",
+    "date", "throughDate", "sourceAsOfDate", "tradeDate", "valuedAt", "taxStateAsOfDate", "accumulationEndDate",
 )
 private val TIMESTAMP_FIELDS = setOf("exportedAt", "createdAt")
 

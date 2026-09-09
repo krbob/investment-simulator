@@ -41,12 +41,14 @@ checked against the committed snapshot by tests. To regenerate after a DTO chang
 ./gradlew --quiet run --args=openapi > openapi/investment-simulator-v1.json
 ```
 
-## What the first version compares
+## What it compares
 
 - Keep existing positions and route new contributions to taxable brokerage, OKI or a split.
 - Sell a specified fraction of one account and repurchase on the other at the start.
 - Fund net withdrawals and taxes from cash, then taxable first, OKI first or proportionally.
 - Separate the accumulation period from withdrawals using `contributionUntil` and `withdrawalFrom`.
+- Start annual percentage withdrawals from the current portfolio after accumulation, while
+  keeping the rest invested throughout a separate withdrawal period.
 - Compare terminal market value and real value after hypothetical liquidation, all outstanding
   taxes and trading costs; report withdrawal shortfalls separately.
 
@@ -59,9 +61,36 @@ and the repurchased position. Its tax estimate can change when later sales in th
 realize losses. `liquidationTaxPln` is the **additional** terminal tax adjustment and can be
 negative when a hypothetical loss offsets gains already assessed for the final year.
 
-Strategies share identical household contributions, net spending requests and market paths.
+Strategies share identical household contributions, spending rules and market paths. Fixed
+spending requests are identical; percentage-based spending varies with each strategy's assets.
 Tax is funded inside that budget; avoided tax therefore remains invested or in the cash buffer
 without adding a second artificial "tax saving" contribution.
+
+## Annual withdrawals after accumulation
+
+Set `annualWithdrawalPlan` to `{ "startDate": "2047-01-01", "rate": 0.04 }` to withdraw 4% of
+each strategy's **current** portfolio every 1 January. The base includes taxable equity, OKI
+equity and outside cash. The requested amount is net household spending; taxes and fees are
+funded additionally inside the portfolio. Monthly contributions stop before that date.
+
+`endDate` is the end of the entire simulation, including the withdrawal period. There is no
+liquidation at retirement. The [retirement example](examples/retirement.json) accumulates for
+20 years, then withdraws for 30 years; the amount is recalculated each year and can fall.
+
+```sh
+build/install/investment-simulator/bin/investment-simulator compare \
+  examples/retirement.json > retirement.local.json
+build/install/investment-simulator/bin/investment-simulator sensitivity \
+  examples/retirement-sensitivity.json > retirement-sensitivity.local.json
+python3 scripts/render-sensitivity.py \
+  --input retirement-sensitivity.local.json --output retirement.local.html
+```
+
+The sensitivity example compares 10 and 20 years of accumulation, each followed by 30 years of
+withdrawals. The report separates accumulation end from simulation end and shows annual nominal
+and real withdrawals. With this policy, `AUTO` ranks cumulative real spending plus real residual
+wealth; terminal wealth remains available separately. This is an explicit comparison objective,
+not a guaranteed-income or retirement-safety assessment. Read the [retirement guide](docs/retirement-withdrawals.md).
 
 ## Scope and methodology
 

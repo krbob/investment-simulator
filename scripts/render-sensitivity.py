@@ -27,11 +27,15 @@ TRANSFER_FIELDS = (
     "grossSoldPln", "realizedGainPln", "estimatedAdditionalCapitalGainsTaxPln",
     "proceedsTransferredPln", "purchasedValuePln", "feesPln",
 )
+OBJECTIVE_MONEY_FIELDS = ("comparisonValuePln", "objectiveAdvantageVsBaselinePln", "realWithdrawalsPaidPln", "realTotalBenefitPln")
+ANNUAL_MONEY_FIELDS = ("portfolioValuePln", "requestedPln", "paidPln", "realPaidPln")
+OBJECTIVES = {"REAL_TERMINAL_WEALTH", "REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH"}
 COORDINATES = ("equityReturnRateShift", "inflationRateShift", "assumedOkiTaxRateShift", "endDate")
 AXES = ("equityReturnRateShifts", "inflationRateShifts", "assumedOkiTaxRateShifts", "endDates")
 TRANSITION_AXES = dict(zip(
     ("EQUITY_RETURN_RATE_SHIFT", "INFLATION_RATE_SHIFT", "ASSUMED_OKI_TAX_RATE_SHIFT", "END_DATE"), COORDINATES,
 ))
+TRANSITION_AXES["ACCUMULATION_END_DATE"] = "accumulationEndDate"
 TRANSITION_KINDS = {"PREFERRED_STRATEGY_CHANGE", "BASELINE_BREAK_EVEN", "MINIMUM_ADVANTAGE_CROSSING", "FEASIBILITY_CHANGE"}
 
 
@@ -81,6 +85,15 @@ def validate_report(report: dict) -> None:
     strategy_ids = [item["id"] for item in strategies]
     require(len(set(strategy_ids)) == len(strategy_ids), "Base strategy IDs must be unique.")
     require(base.get("baselineStrategyId") in strategy_ids, "The baseline strategy must be present.")
+    annual_plan = base.get("annualWithdrawalPlan")
+    if annual_plan is not None:
+        require(isinstance(annual_plan, dict) and valid_date(annual_plan.get("startDate")) and annual_plan["startDate"].endswith("-01-01"), "Annual withdrawals must start on 1 January.")
+        require(type(annual_plan.get("rate")) in (int, float) and math.isfinite(annual_plan["rate"]) and 0 < annual_plan["rate"] <= 1, "The annual withdrawal fraction must be finite and between zero and one.")
+    has_objective = "comparisonObjective" in report
+    if has_objective:
+        require(report["comparisonObjective"] in OBJECTIVES, "The report must state its resolved comparison objective.")
+    else:
+        require(annual_plan is None and base.get("comparisonObjective", "AUTO") in {"AUTO", "REAL_TERMINAL_WEALTH"}, "Retirement and income-objective reports must include objective results.")
     assumptions = base.get("assumptions")
     require(isinstance(assumptions, list) and bool(assumptions), "The base annual assumptions are missing.")
     require(all(isinstance(item, dict) and type(item.get("year")) is int and all(type(item.get(key)) in (int, float) and math.isfinite(item[key]) for key in ("equityReturnRate", "inflationRate", "okiTaxRate")) for item in assumptions), "The base annual assumptions are incomplete.")
@@ -91,9 +104,19 @@ def validate_report(report: dict) -> None:
         require(all(type(value) in (int, float) and math.isfinite(value) for value in values), "Rate samples must be finite numbers.")
         require(len(set(values)) == len(values), "Rate axis samples must be unique.")
         axis_values.append(values)
-    horizons = axes.get("endDates")
-    require(isinstance(horizons, list) and all(valid_date(value) for value in horizons), "Horizon samples must be ISO calendar dates.")
-    horizons = horizons or [base["endDate"]]
+    end_dates = axes.get("endDates")
+    accumulation_dates = axes.get("accumulationEndDates", [])
+    require(isinstance(end_dates, list) and all(valid_date(value) for value in end_dates), "Horizon samples must be ISO calendar dates.")
+    require(isinstance(accumulation_dates, list) and all(valid_date(value) and value.endswith("-12-31") for value in accumulation_dates), "Accumulation samples must end on 31 December.")
+    if accumulation_dates:
+        require(not end_dates and annual_plan is not None and has_objective, "Accumulation horizons require an annual withdrawal plan and replace end-date horizons.")
+        years = axes.get("withdrawalYears")
+        require(type(years) is int and years > 0 and all(date.fromisoformat(value).year + years <= 9999 for value in accumulation_dates), "Accumulation horizons require a positive withdrawal duration in years.")
+        horizons = [(f"{date.fromisoformat(value).year + years:04d}-12-31", value) for value in accumulation_dates]
+        require(all(base["startDate"] <= accumulation < end <= base["endDate"] for end, accumulation in horizons), "Accumulation and withdrawal horizons must fit the supplied base path.")
+    else:
+        require(axes.get("withdrawalYears") is None, "Withdrawal years require accumulation horizon samples.")
+        horizons = [(value, None) for value in end_dates or [base["endDate"]]]
     require(len(set(horizons)) == len(horizons), "Horizon samples must be unique.")
     axis_values.append(horizons)
     scenarios = report.get("scenarios")
@@ -111,7 +134,9 @@ def validate_report(report: dict) -> None:
         coordinates = scenario.get("coordinates")
         require(isinstance(coordinates, dict) and all(key in coordinates for key in COORDINATES), "Scenario coordinates are incomplete.")
         require(all(type(coordinates[key]) in (int, float) and math.isfinite(coordinates[key]) for key in COORDINATES[:3]) and valid_date(coordinates["endDate"]), "Scenario coordinates have invalid types.")
-        cell = tuple(coordinates[key] for key in COORDINATES)
+        accumulation = coordinates.get("accumulationEndDate")
+        require(accumulation is None or valid_date(accumulation), "Accumulation coordinates must be ISO calendar dates or null.")
+        cell = tuple(coordinates[key] for key in COORDINATES[:3]) + ((coordinates["endDate"], accumulation),)
         require(cell in expected and cell not in cells, "Scenario grid has duplicate or unexpected cells.")
         cells.add(cell)
         by_id[scenario["id"]] = scenario
@@ -129,7 +154,20 @@ def validate_report(report: dict) -> None:
             require("initialTransfer" in result, "Initial migration details must be present or null.")
             transfer = result["initialTransfer"]
             require(transfer is None or (isinstance(transfer, dict) and transfer.get("direction") in {"TAXABLE_TO_OKI", "OKI_TO_TAXABLE"} and all(decimal_string(transfer.get(key)) for key in TRANSFER_FIELDS)), "Initial migration details are incomplete.")
-        for key in ("preferredStrategyId", "highestValueStrategyId"):
+            if has_objective:
+                require(all(decimal_string(result.get(key)) for key in OBJECTIVE_MONEY_FIELDS), "Objective and real withdrawal amounts must be finite decimal strings.")
+                require("objectiveRegretVsBestFeasiblePln" in result and decimal_string(result["objectiveRegretVsBestFeasiblePln"], nullable=True), "Objective regret must be a decimal string or null.")
+                withdrawals = result.get("annualWithdrawals")
+                require(isinstance(withdrawals, list), "Annual withdrawal history must be present, even when empty.")
+                previous_date = ""
+                for withdrawal in withdrawals:
+                    require(isinstance(withdrawal, dict) and valid_date(withdrawal.get("date")) and withdrawal["date"].endswith("-01-01"), "Annual withdrawal history contains an invalid date.")
+                    require(base["startDate"] <= withdrawal["date"] <= coordinates["endDate"] and previous_date < withdrawal["date"], "Annual withdrawal history must be ordered, unique and inside the scenario horizon.")
+                    require(annual_plan is not None and (accumulation is None or withdrawal["date"] > accumulation), "Annual withdrawals require a plan and must follow accumulation.")
+                    require(type(withdrawal.get("rate")) in (int, float) and math.isfinite(withdrawal["rate"]) and 0 < withdrawal["rate"] <= 1, "Annual withdrawal history has an invalid rate.")
+                    require(all(decimal_string(withdrawal.get(key)) for key in ANNUAL_MONEY_FIELDS), "Annual withdrawal amounts must be finite decimal strings.")
+                    previous_date = withdrawal["date"]
+        for key in ("preferredStrategyId", "highestValueStrategyId") + (("highestObjectiveStrategyId",) if has_objective else ()):
             require(key in scenario and (scenario[key] in feasible_ids if isinstance(scenario[key], str) else scenario[key] is None and not feasible_ids), "Selected strategies must be feasible, or null when every strategy is infeasible.")
         infeasible_count += not feasible_ids
         require(scenario.get("recommendation") in {"CHANGE", "KEEP_BASELINE", "NO_CLEAR_ADVANTAGE", "WITHDRAWAL_SHORTFALL"}, "Scenario recommendation is missing or invalid.")
@@ -142,7 +180,9 @@ def validate_report(report: dict) -> None:
     summary_keys = set()
     for summary in summaries:
         require(isinstance(summary, dict) and isinstance(summary.get("strategyId"), str) and isinstance(summary.get("endDate"), str), "A horizon summary is incomplete.")
-        key = (summary["endDate"], summary["strategyId"])
+        summary_horizon = (summary["endDate"], summary.get("accumulationEndDate"))
+        require(summary_horizon[1] is None or valid_date(summary_horizon[1]), "Summary accumulation date is invalid.")
+        key = (summary_horizon, summary["strategyId"])
         require(key in set(itertools.product(horizons, strategy_ids)) and key not in summary_keys, "Horizon summaries contain duplicate or unexpected entries.")
         summary_keys.add(key)
         require(count(summary.get("scenarioCount")) and summary["scenarioCount"] == len(scenarios) // len(horizons), "Horizon summary sample count does not match the grid.")
@@ -150,6 +190,10 @@ def validate_report(report: dict) -> None:
             require(count(summary.get(field)) and summary[field] <= summary["scenarioCount"], "Horizon summary counts are invalid.")
         for field in ("minimumAdvantageVsBaselinePln", "maximumAdvantageVsBaselinePln", "maximumRegretVsBestFeasiblePln"):
             require(field in summary and decimal_string(summary[field], nullable=True), "Horizon summary money values are incomplete.")
+        if has_objective:
+            require(count(summary.get("highestObjectiveScenarioCount")) and summary["highestObjectiveScenarioCount"] <= summary["scenarioCount"], "Horizon objective counts are invalid.")
+            for field in ("minimumObjectiveAdvantageVsBaselinePln", "maximumObjectiveAdvantageVsBaselinePln", "maximumObjectiveRegretVsBestFeasiblePln"):
+                require(field in summary and decimal_string(summary[field], nullable=True), "Horizon objective money values are incomplete.")
     require(len(summary_keys) == len(horizons) * len(strategy_ids), "Horizon summaries do not cover every strategy.")
     transitions = report.get("transitions")
     require(isinstance(transitions, list), "Sampled transition brackets are missing.")
@@ -160,8 +204,9 @@ def validate_report(report: dict) -> None:
         require(transition.get("strategyId") is None or transition.get("strategyId") in strategy_ids, "A sampled transition refers to an unknown strategy.")
         left = by_id[transition["fromScenarioId"]]["coordinates"]
         right = by_id[transition["toScenarioId"]]["coordinates"]
-        changed = [key for key in COORDINATES if left[key] != right[key]]
-        require(changed == [TRANSITION_AXES[transition["axis"]]], "A sampled transition must change only its stated axis.")
+        changed = {key for key in COORDINATES + ("accumulationEndDate",) if left.get(key) != right.get(key)}
+        expected_changes = {"accumulationEndDate", "endDate"} if transition["axis"] == "ACCUMULATION_END_DATE" else {TRANSITION_AXES[transition["axis"]]}
+        require(changed == expected_changes, "A sampled transition must change only its stated axis and any coupled retirement end date.")
     require(isinstance(report.get("limitations"), list) and all(isinstance(value, str) for value in report["limitations"]), "Report limitations must be a list of text entries.")
 
 
@@ -234,6 +279,7 @@ caption{text-align:left;color:#566271;padding:0 0 10px}button{font:inherit;curso
 .legend{display:flex;flex-wrap:wrap;gap:10px 20px;font-size:.85rem;margin:12px 0}.legend span{display:inline-flex;align-items:center;gap:6px}.swatch{width:14px;height:14px;border:1px solid #73808d;border-radius:3px}
 .badge{display:inline-block;padding:3px 9px;border-radius:5px;background:#e8edf3;font-size:.85rem}.link-button{background:none;border:0;color:#145d9c;text-decoration:underline;padding:0;text-align:left}
 details{margin-top:16px}summary{cursor:pointer;font-weight:600}ul{padding-left:22px}.note{border-left:3px solid #a1b3c5;padding-left:12px}.empty{padding:12px;color:#566271}
+#annual-history .scroll{max-height:460px}#annual-history thead{position:sticky;top:0}#annual-strategy{max-width:420px}
 @media(max-width:640px){main{padding:22px 12px}section,.panel{padding:15px}h1{font-size:1.7rem}label,select{width:100%}}
 @media print{body{background:white}main{max-width:none;padding:0}section{break-inside:avoid}.controls{display:none}.scroll{overflow:visible}.cell{min-width:80px}button{color:inherit}}
 </style>
@@ -241,18 +287,24 @@ details{margin-top:16px}summary{cursor:pointer;font-weight:600}ul{padding-left:2
 <body><main>
 <header><p class="eyebrow">Investment simulator · sensitivity analysis</p><h1>Which strategy holds up across your assumptions?</h1>
 <p>Explore the supplied deterministic scenarios. Each cell compares the same strategies under one set of assumptions.</p>
-<p class="muted" id="overview"></p><p class="note">Sample counts describe this chosen grid. They are not probabilities. Changes between adjacent samples bracket a transition; they do not establish an exact threshold.</p></header>
+<p class="muted" id="overview"></p><p id="objective-note" class="note"></p><p class="note">Sample counts describe this chosen grid. They are not probabilities. Changes between adjacent samples bracket a transition; they do not establish an exact threshold.</p></header>
 <noscript><p class="panel">Enable JavaScript to explore this local report. All data and code are contained in this file.</p></noscript>
 <section aria-labelledby="map-heading"><h2 id="map-heading">Scenario map</h2>
-<div class="controls"><label for="horizon">Horizon end<select id="horizon"></select></label><label for="inflation">Inflation rate shift<select id="inflation"></select></label><label for="metric">Map shows<select id="metric"></select></label></div>
+<div class="controls"><label for="horizon"><span id="horizon-label">Horizon end</span><select id="horizon"></select></label><label for="inflation">Inflation rate shift<select id="inflation"></select></label><label for="metric">Map shows<select id="metric"></select></label></div>
 <p class="muted">Columns shift annual equity returns; rows shift assumed OKI rates. Shifts are additive percentage points (pp). Established OKI rates stay unchanged.</p>
 <div id="legend" class="legend" aria-label="Map legend"></div><div class="scroll"><table class="map" id="map"><caption>Choose a cell to inspect its strategy results.</caption></table></div></section>
 <section aria-labelledby="detail-heading"><h2 id="detail-heading">Selected scenario</h2><p id="detail-label"></p><p id="detail-note" class="muted"></p>
 <div class="scroll"><table id="results"><caption>Money is shown as the supplied decimal strings, without rounding. Real values use the simulation start's purchasing power.</caption></table></div>
 <details><summary>Tax, spending and cost details</summary><div class="scroll"><table id="costs"></table></div></details>
+<details><summary>Terminal wealth comparison</summary><p class="muted">This view compares only wealth remaining at the horizon. It excludes withdrawals already paid.</p><div class="scroll"><table id="terminal-results"></table></div></details>
 <p id="rate-provenance" class="muted"></p></section>
-<section aria-labelledby="summary-heading"><h2 id="summary-heading">Across the selected horizon</h2><p class="muted">All return, inflation and assumed OKI samples at this horizon, including inflation slices currently hidden from the map. Different horizons are summarized separately.</p>
-<div class="scroll"><table id="summaries"></table></div></section>
+<section id="annual-history" aria-labelledby="annual-heading" hidden><h2 id="annual-heading">Annual portfolio withdrawals</h2>
+<p class="note">The selected fraction is recalculated each 1 January from that strategy's current taxable assets, OKI assets and outside cash, after taxes due and other same-day flows. It requests net spending; taxes are funded in addition from the portfolio. Net withdrawals can differ between strategies.</p>
+<p class="muted">There is no fixed income floor. A feasible strategy can pay very little or zero when its portfolio shrinks. Inspect the real spending amounts as well as feasibility.</p>
+<label for="annual-strategy">Strategy<select id="annual-strategy"></select></label><p id="annual-label" class="muted"></p>
+<div class="scroll"><table id="annual-withdrawals"><caption>Each real payment uses inflation at its own payment date, in purchasing power at the simulation start.</caption></table></div><p id="annual-empty" class="empty" hidden>No annual withdrawal dates fall inside this selected scenario.</p></section>
+<section aria-labelledby="summary-heading"><h2 id="summary-heading">Across the selected horizon</h2><p id="summary-context" class="muted">All return, inflation and assumed OKI samples at this horizon, including inflation slices currently hidden from the map. Different horizons are summarized separately.</p>
+<div class="scroll"><table id="summaries"></table></div><details><summary>Terminal wealth summary</summary><div class="scroll"><table id="terminal-summaries"></table></div></details></section>
 <section aria-labelledby="transition-heading"><h2 id="transition-heading">Sampled transition brackets</h2><p class="muted">Adjacent samples touching the selected horizon. This table includes all inflation slices. The endpoints identify a sampled interval, without interpolation or a claim that the relationship is monotonic.</p>
 <div class="scroll"><table id="transitions"></table></div><p id="transition-empty" class="empty" hidden>No transitions were observed between the supplied adjacent samples touching this horizon.</p></section>
 <section aria-labelledby="assumptions-heading"><h2 id="assumptions-heading">Assumptions and limitations</h2><ul id="limitations"></ul>
@@ -263,6 +315,11 @@ details{margin-top:16px}summary{cursor:pointer;font-weight:600}ul{padding-left:2
 'use strict';
 const data=JSON.parse(document.getElementById('report-data').textContent);
 const base=data.request.baseRequest, axes=data.request.axes;
+const hasObjective=Object.hasOwn(data,'comparisonObjective');
+const objective=data.comparisonObjective||'REAL_TERMINAL_WEALTH';
+const incomeObjective=objective==='REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH';
+const objectiveLabel=incomeObjective?'Total real benefit':'Real terminal wealth';
+const retirementMode=(axes.accumulationEndDates||[]).length>0;
 const strategies=base.strategies.map(strategy=>strategy.id);
 const scenarios=new Map(data.scenarios.map(scenario=>[scenario.id,scenario]));
 const palette=['#cde4fa','#c8eadc','#f4ddae','#e4d9f6','#f5ced6','#cbe8ee','#e8e6b7','#dbdfe5'];
@@ -275,58 +332,83 @@ function rate(value){return (value*100).toFixed(8).replace(/\.?0+$/,'')+'%';}
 function money(value){if(value===null||value===undefined)return '—';const match=/^([+-]?)(\d+)(\.\d+)?$/.exec(value);return match?match[1]+match[2].replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')+(match[3]||''):value;}
 function table(id,headers){const target=byId(id);target.querySelectorAll('thead,tbody').forEach(element=>element.remove());const head=node('thead'),row=node('tr');headers.forEach(header=>{const cell=node('th',header);cell.scope='col';row.append(cell);});head.append(row);const body=node('tbody');target.append(head,body);return body;}
 function row(body,values,moneyColumns=[]){const result=node('tr');values.forEach((value,index)=>result.append(node('td',value,moneyColumns.includes(index)?'money':'')));body.append(result);return result;}
-function describe(scenario){const c=scenario.coordinates;return c.endDate+' · return '+pp(c.equityReturnRateShift)+' · inflation '+pp(c.inflationRateShift)+' · assumed OKI '+pp(c.assumedOkiTaxRateShift);}
+function horizonKey(value){return (value.accumulationEndDate||'')+'|'+value.endDate;}
+function horizonLabel(value){return value.accumulationEndDate?'Accumulate through '+value.accumulationEndDate+' → '+axes.withdrawalYears+' withdrawal years, ending '+value.endDate:'Simulation ends '+value.endDate;}
+function describe(scenario){const c=scenario.coordinates;return horizonLabel(c)+' · return '+pp(c.equityReturnRateShift)+' · inflation '+pp(c.inflationRateShift)+' · assumed OKI '+pp(c.assumedOkiTaxRateShift);}
 function strategyColor(id){return id===null?neutral:palette[strategies.indexOf(id)%palette.length];}
-function metricStrategy(){const value=byId('metric').value;return value==='preferred'?null:strategies[Number(value)];}
+function selectedMetric(){const value=byId('metric').value;if(value==='preferred')return null;const [kind,index]=value.split(':');return {kind,id:strategies[Number(index)]};}
+function objectiveField(value,current,legacy){return value[hasObjective?current:legacy];}
+function advantage(result,kind){return kind==='terminal'?result.advantageVsBaselinePln:objectiveField(result,'objectiveAdvantageVsBaselinePln','advantageVsBaselinePln');}
 function comparable(scenario,id){return scenario.strategies.find(value=>value.strategyId===base.baselineStrategyId).feasible&&scenario.strategies.find(value=>value.strategyId===id).feasible;}
 let selectedId=null;
-const horizons=[...new Set(data.scenarios.map(value=>value.coordinates.endDate))].sort();
-horizons.forEach(value=>option(byId('horizon'),value,value));
+const horizons=[...new Map(data.scenarios.map(value=>[horizonKey(value.coordinates),value.coordinates])).values()].sort((a,b)=>horizonKey(a).localeCompare(horizonKey(b)));
+horizons.forEach(value=>option(byId('horizon'),horizonKey(value),horizonLabel(value)));
+if(retirementMode)byId('horizon-label').textContent='Accumulation and withdrawal horizon';
 [...axes.inflationRateShifts].sort((a,b)=>a-b).forEach(value=>option(byId('inflation'),String(value),pp(value)));
-option(byId('metric'),'preferred','Preferred strategy');strategies.forEach((value,index)=>option(byId('metric'),String(index),'Real advantage · '+value));
+option(byId('metric'),'preferred','Preferred strategy by comparison objective');strategies.forEach((value,index)=>{option(byId('metric'),'objective:'+index,'Objective advantage · '+value);option(byId('metric'),'terminal:'+index,'Terminal wealth advantage · '+value);option(byId('annual-strategy'),String(index),value);});
 byId('overview').textContent=data.scenarioCount+' scenarios · '+strategies.length+' strategies · '+horizons.length+' horizons · '+data.allInfeasibleScenarioCount+' scenarios with no feasible strategy. Baseline: '+base.baselineStrategyId+'.';
+byId('objective-note').textContent='Comparison objective: '+objectiveLabel+'. '+(incomeObjective?'The score adds cumulative real withdrawals paid to real terminal wealth. Each withdrawal is deflated at its payment date.':'The score measures real wealth left after hypothetical liquidation at the horizon.')+' Preferred strategies, recommendation changes and preferred counts follow this objective. '+(hasObjective?'':'This legacy report has no cumulative real withdrawal amounts; they are shown as unavailable.');
 byId('versions').textContent='Sensitivity '+data.sensitivityVersion+' · Engine '+data.engineVersion+' · Tax rules '+data.taxRulesVersion+'. This standalone file makes no network requests.';
 data.limitations.forEach(value=>byId('limitations').append(node('li',value)));
 const assumptionBody=table('base-assumptions',['Year','Equity return','Inflation','OKI tax rate','OKI rate status']);
 (base.assumptions||[]).forEach(value=>row(assumptionBody,[value.year,rate(value.equityReturnRate),rate(value.inflationRate),rate(value.okiTaxRate),value.okiRateStatus||'ASSUMED']));
 function renderMap(){
- const horizon=byId('horizon').value,inflation=Number(byId('inflation').value),metric=metricStrategy();
- const slice=data.scenarios.filter(value=>value.coordinates.endDate===horizon&&value.coordinates.inflationRateShift===inflation);
+ const horizon=byId('horizon').value,inflation=Number(byId('inflation').value),metric=selectedMetric();
+ const slice=data.scenarios.filter(value=>horizonKey(value.coordinates)===horizon&&value.coordinates.inflationRateShift===inflation);
  const returns=[...axes.equityReturnRateShifts].sort((a,b)=>a-b),oki=[...axes.assumedOkiTaxRateShifts].sort((a,b)=>a-b);
  if(!slice.some(value=>value.id===selectedId))selectedId=slice[0].id;
  const body=table('map',['Assumed OKI shift ↓ / return shift →',...returns.map(pp)]);
  // Decimal money stays text everywhere; Number is used only for the optional color intensity.
- const colorScale=metric===null?1:Math.max(1,...slice.filter(value=>comparable(value,metric)).map(value=>Math.abs(Number(value.strategies.find(item=>item.strategyId===metric).advantageVsBaselinePln))));
+ const colorScale=metric===null?1:Math.max(1,...slice.filter(value=>comparable(value,metric.id)).map(value=>Math.abs(Number(advantage(value.strategies.find(item=>item.strategyId===metric.id),metric.kind)))));
  for(const okiShift of oki){const tr=node('tr'),heading=node('th',pp(okiShift));heading.scope='row';tr.append(heading);
   for(const equityShift of returns){const scenario=slice.find(value=>value.coordinates.equityReturnRateShift===equityShift&&value.coordinates.assumedOkiTaxRateShift===okiShift);const td=node('td'),button=node('button',undefined,'cell');button.type='button';button.dataset.scenarioId=scenario.id;button.setAttribute('aria-pressed',String(scenario.id===selectedId));
    let label=scenario.preferredStrategyId===null?'No feasible strategy':scenario.preferredStrategyId,color=strategyColor(scenario.preferredStrategyId);
-   if(metric!==null){if(comparable(scenario,metric)){const result=scenario.strategies.find(value=>value.strategyId===metric),value=Number(result.advantageVsBaselinePln);label=money(result.advantageVsBaselinePln)+' PLN';const intensity=Math.min(1,Math.abs(value)/colorScale);color='hsl('+(value<0?25:155)+' 55% '+(94-22*intensity)+'%)';}else{label=scenario.preferredStrategyId===null?'No feasible strategy':'Not comparable';color=neutral;}}
+   if(metric!==null){if(comparable(scenario,metric.id)){const result=scenario.strategies.find(value=>value.strategyId===metric.id),amount=advantage(result,metric.kind),value=Number(amount);label=money(amount)+' PLN';const intensity=Math.min(1,Math.abs(value)/colorScale);color='hsl('+(value<0?25:155)+' 55% '+(94-22*intensity)+'%)';}else{label=scenario.preferredStrategyId===null?'No feasible strategy':'Not comparable';color=neutral;}}
    button.style.backgroundColor=color;button.append(node('span',label),node('small',scenario.recommendation.toLowerCase().replaceAll('_',' ')));button.setAttribute('aria-label',describe(scenario)+'. '+label+'. Show strategy results.');button.addEventListener('click',()=>selectScenario(scenario.id));td.append(button);tr.append(td);
   }body.append(tr);
  }
- const legend=byId('legend');legend.replaceChildren();const legendItems=metric===null?[...strategies.map(value=>[value,strategyColor(value)]),['No feasible strategy',neutral]]:[['Positive real advantage','#b0dfcf'],['Negative real advantage','#efd0b3'],['Infeasible or baseline not comparable',neutral]];
+ const legend=byId('legend');legend.replaceChildren();const metricLabel=metric?.kind==='terminal'?'terminal wealth':'objective';const legendItems=metric===null?[...strategies.map(value=>[value,strategyColor(value)]),['No feasible strategy',neutral]]:[['Positive '+metricLabel+' advantage','#b0dfcf'],['Negative '+metricLabel+' advantage','#efd0b3'],['Infeasible or baseline not comparable',neutral]];
  legendItems.forEach(([text,color])=>{const item=node('span'),swatch=node('i',undefined,'swatch');swatch.style.backgroundColor=color;swatch.setAttribute('aria-hidden','true');item.append(swatch,node('span',text));legend.append(item);});
  renderDetails();renderSummary();renderTransitions();
 }
-function selectScenario(id){const scenario=scenarios.get(id);selectedId=id;byId('horizon').value=scenario.coordinates.endDate;byId('inflation').value=String(scenario.coordinates.inflationRateShift);renderMap();byId('map').querySelectorAll('button').forEach(button=>{if(button.dataset.scenarioId===id)button.focus({preventScroll:true});});}
+function selectScenario(id){const scenario=scenarios.get(id);selectedId=id;byId('horizon').value=horizonKey(scenario.coordinates);byId('inflation').value=String(scenario.coordinates.inflationRateShift);renderMap();byId('map').querySelectorAll('button').forEach(button=>{if(button.dataset.scenarioId===id)button.focus({preventScroll:true});});}
 function renderDetails(){
  const scenario=scenarios.get(selectedId);byId('detail-label').textContent=scenario.id+' · '+describe(scenario);
- byId('detail-note').textContent=scenario.preferredStrategyId===null?'Every strategy is infeasible in this sample. No action is preferred.':'Preferred: '+scenario.preferredStrategyId+'. Highest real value among feasible strategies: '+scenario.highestValueStrategyId+'. Recommendation: '+scenario.recommendation.toLowerCase().replaceAll('_',' ')+'.';
- const body=table('results',['Strategy','Feasible','Real net wealth (PLN)','Real advantage vs baseline (PLN)','Real regret vs best feasible (PLN)','Initial migration PIT estimate (PLN)']);
+ byId('detail-note').textContent=scenario.preferredStrategyId===null?'Every strategy is infeasible in this sample. No action is preferred.':'Preferred: '+scenario.preferredStrategyId+'. Highest '+objectiveLabel.toLowerCase()+' among feasible strategies: '+objectiveField(scenario,'highestObjectiveStrategyId','highestValueStrategyId')+'. Highest terminal wealth: '+scenario.highestValueStrategyId+'. Recommendation: '+scenario.recommendation.toLowerCase().replaceAll('_',' ')+'.';
+ const body=table('results',['Strategy','Feasible','Cumulative real withdrawals (PLN)','Real terminal wealth (PLN)','Total real benefit (PLN)','Objective advantage vs baseline (PLN)','Objective regret vs best feasible (PLN)','Initial migration PIT estimate (PLN)']);
  const costBody=table('costs',['Strategy','Contributions (PLN)','Net withdrawals paid (PLN)','Withdrawal shortfall (PLN)','Unpaid tax (PLN)','Outstanding tax (PLN)','PIT paid (PLN)','OKI tax paid (PLN)','Trading fees (PLN)','Liquidation tax (PLN)','Liquidation fees (PLN)']);
- scenario.strategies.forEach(result=>{const migration=result.initialTransfer;row(body,[result.strategyId,result.feasible?'Yes':'No',money(result.realNetLiquidationValuePln),comparable(scenario,result.strategyId)?money(result.advantageVsBaselinePln):'Not comparable',money(result.regretVsBestFeasiblePln),migration?money(migration.estimatedAdditionalCapitalGainsTaxPln):'No migration'],[2,3,4,5]);row(costBody,[result.strategyId,...['contributionsPln','withdrawalsPaidPln','withdrawalShortfallPln','unpaidTaxPln','outstandingTaxPln','capitalGainsTaxPaidPln','okiTaxPaidPln','tradingFeesPln','liquidationTaxPln','liquidationFeesPln'].map(key=>money(result[key]))],[1,2,3,4,5,6,7,8,9,10]);});
+ const terminalBody=table('terminal-results',['Strategy','Real terminal wealth (PLN)','Terminal advantage vs baseline (PLN)','Terminal regret vs best feasible (PLN)']);
+ scenario.strategies.forEach(result=>{const migration=result.initialTransfer;
+  row(body,[result.strategyId,result.feasible?'Yes':'No',hasObjective?money(result.realWithdrawalsPaidPln):'Unavailable',money(result.realNetLiquidationValuePln),hasObjective?money(result.realTotalBenefitPln):'Unavailable',comparable(scenario,result.strategyId)?money(advantage(result,'objective')):'Not comparable',money(objectiveField(result,'objectiveRegretVsBestFeasiblePln','regretVsBestFeasiblePln')),migration?money(migration.estimatedAdditionalCapitalGainsTaxPln):'No migration'],[2,3,4,5,6,7]);
+  row(terminalBody,[result.strategyId,money(result.realNetLiquidationValuePln),comparable(scenario,result.strategyId)?money(result.advantageVsBaselinePln):'Not comparable',money(result.regretVsBestFeasiblePln)],[1,2,3]);
+  row(costBody,[result.strategyId,...['contributionsPln','withdrawalsPaidPln','withdrawalShortfallPln','unpaidTaxPln','outstandingTaxPln','capitalGainsTaxPaidPln','okiTaxPaidPln','tradingFeesPln','liquidationTaxPln','liquidationFeesPln'].map(key=>money(result[key]))],[1,2,3,4,5,6,7,8,9,10]);});
  byId('rate-provenance').textContent='Established OKI years kept unchanged: '+(scenario.preservedEstablishedOkiYears.join(', ')||'none')+'. Assumed OKI years shifted: '+(scenario.shiftedAssumedOkiYears.join(', ')||'none')+'. Explicit cash flows omitted after this horizon: '+scenario.omittedCashFlowCount+'. Migration PIT is an estimate at the initial sale; later tax settlement follows the scenario.';
+ renderAnnualWithdrawals();
+}
+function renderAnnualWithdrawals(){
+ byId('annual-history').hidden=!base.annualWithdrawalPlan;
+ if(!base.annualWithdrawalPlan)return;
+ const scenario=scenarios.get(selectedId),id=strategies[Number(byId('annual-strategy').value)],result=scenario.strategies.find(value=>value.strategyId===id),history=result.annualWithdrawals||[];
+ byId('annual-label').textContent=scenario.id+' · '+horizonLabel(scenario.coordinates)+' · '+id+'. Cumulative real withdrawals paid: '+money(result.realWithdrawalsPaidPln)+' PLN. Feasible: '+(result.feasible?'yes':'no')+'.';
+ const body=table('annual-withdrawals',['Payment date','Current portfolio base (nominal PLN)','Withdrawal fraction','Requested net spending (nominal PLN)','Net spending paid (nominal PLN)','Net spending paid (real PLN)']);
+ history.forEach(value=>row(body,[value.date,money(value.portfolioValuePln),rate(value.rate),money(value.requestedPln),money(value.paidPln),money(value.realPaidPln)],[1,3,4,5]));
+ byId('annual-empty').hidden=history.length>0;
 }
 function renderSummary(){
- const body=table('summaries',['Strategy','Samples','Feasible','Preferred','Highest real value','Comparable to baseline','Minimum real advantage (PLN)','Maximum real advantage (PLN)','Maximum real regret (PLN)']);
- data.strategySummaries.filter(value=>value.endDate===byId('horizon').value).forEach(value=>row(body,[value.strategyId,value.scenarioCount,value.feasibleScenarioCount,value.preferredScenarioCount,value.highestValueScenarioCount,value.comparableToBaselineScenarioCount,money(value.minimumAdvantageVsBaselinePln),money(value.maximumAdvantageVsBaselinePln),money(value.maximumRegretVsBestFeasiblePln)],[6,7,8]));
+ const body=table('summaries',['Strategy','Samples','Feasible','Preferred by objective','Highest objective value','Comparable to baseline','Minimum objective advantage (PLN)','Maximum objective advantage (PLN)','Maximum objective regret (PLN)']);
+ const terminalBody=table('terminal-summaries',['Strategy','Highest terminal wealth','Minimum terminal advantage (PLN)','Maximum terminal advantage (PLN)','Maximum terminal regret (PLN)']);
+ byId('summary-context').textContent=horizonLabel(scenarios.get(selectedId).coordinates)+'. All return, inflation and assumed OKI samples at this horizon, including hidden inflation slices. Different horizons are summarized separately. Preferred counts follow '+objectiveLabel.toLowerCase()+'.';
+ data.strategySummaries.filter(value=>horizonKey(value)===byId('horizon').value).forEach(value=>{
+  row(body,[value.strategyId,value.scenarioCount,value.feasibleScenarioCount,value.preferredScenarioCount,objectiveField(value,'highestObjectiveScenarioCount','highestValueScenarioCount'),value.comparableToBaselineScenarioCount,money(objectiveField(value,'minimumObjectiveAdvantageVsBaselinePln','minimumAdvantageVsBaselinePln')),money(objectiveField(value,'maximumObjectiveAdvantageVsBaselinePln','maximumAdvantageVsBaselinePln')),money(objectiveField(value,'maximumObjectiveRegretVsBestFeasiblePln','maximumRegretVsBestFeasiblePln'))],[6,7,8]);
+  row(terminalBody,[value.strategyId,value.highestValueScenarioCount,money(value.minimumAdvantageVsBaselinePln),money(value.maximumAdvantageVsBaselinePln),money(value.maximumRegretVsBestFeasiblePln)],[2,3,4]);
+ });
 }
 function renderTransitions(){
- const horizon=byId('horizon').value,visible=data.transitions.filter(value=>scenarios.get(value.fromScenarioId).coordinates.endDate===horizon||scenarios.get(value.toScenarioId).coordinates.endDate===horizon);
+ const horizon=byId('horizon').value,visible=data.transitions.filter(value=>horizonKey(scenarios.get(value.fromScenarioId).coordinates)===horizon||horizonKey(scenarios.get(value.toScenarioId).coordinates)===horizon);
  const body=table('transitions',['Axis','Observed change','Strategy','From sample','To sample']);byId('transition-empty').hidden=visible.length>0;
  visible.forEach(value=>{const tr=row(body,[value.axis.toLowerCase().replaceAll('_',' '),value.kind.toLowerCase().replaceAll('_',' '),value.strategyId||'All strategies']);[value.fromScenarioId,value.toScenarioId].forEach(id=>{const td=node('td'),button=node('button',describe(scenarios.get(id)),'link-button');button.type='button';button.addEventListener('click',()=>selectScenario(id));td.append(button);tr.append(td);});});
 }
-['horizon','inflation','metric'].forEach(id=>byId(id).addEventListener('change',renderMap));renderMap();
+['horizon','inflation','metric'].forEach(id=>byId(id).addEventListener('change',renderMap));byId('annual-strategy').addEventListener('change',renderAnnualWithdrawals);renderMap();
 </script></body></html>
 '''
 

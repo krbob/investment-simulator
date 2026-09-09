@@ -9,7 +9,7 @@ import kotlin.math.pow
 
 /** Deterministic accounting for one accumulating global equity exposure, in PLN. */
 object SimulationEngine {
-    const val VERSION = "0.1.0"
+    const val VERSION = "0.2.0"
     const val TAX_RULES_VERSION = "PL-2026-1098-global-equity-v1"
 
     fun compare(request: ComparisonRequest): ComparisonResult {
@@ -17,14 +17,17 @@ object SimulationEngine {
         val runs = request.strategies.map { Runner(request, it).run() }
         val baseline = runs.first { it.strategyId == request.baselineStrategyId }
         val results = runs.map {
-            it.copy(advantageVsBaselinePln = it.realNetLiquidationValuePln - baseline.realNetLiquidationValuePln)
+            it.copy(
+                advantageVsBaselinePln = it.realNetLiquidationValuePln - baseline.realNetLiquidationValuePln,
+                objectiveAdvantageVsBaselinePln = it.comparisonValuePln - baseline.comparisonValuePln,
+            )
         }
         fun isFeasible(result: StrategyResult) = result.withdrawalShortfallPln.signum() == 0 &&
             result.unpaidTaxPln.signum() == 0 && result.netLiquidationValuePln.signum() >= 0
         val feasible = results.filter(::isFeasible)
         val best = (feasible.ifEmpty { results }).sortedWith(
             compareBy<StrategyResult> { it.withdrawalShortfallPln + it.unpaidTaxPln + (-it.netLiquidationValuePln).positive() }
-                .thenByDescending { it.realNetLiquidationValuePln }
+                .thenByDescending { it.comparisonValuePln }
                 .thenBy { if (it.strategyId == request.baselineStrategyId) 0 else 1 }
                 .thenBy { it.strategyId },
         ).first()
@@ -33,7 +36,7 @@ object SimulationEngine {
             feasible.isEmpty() -> Recommendation.WITHDRAWAL_SHORTFALL
             best.strategyId == baseline.strategyId -> Recommendation.KEEP_BASELINE
             !baselineFeasible -> Recommendation.CHANGE
-            best.advantageVsBaselinePln <= request.minimumAdvantagePln -> Recommendation.NO_CLEAR_ADVANTAGE
+            best.objectiveAdvantageVsBaselinePln <= request.minimumAdvantagePln -> Recommendation.NO_CLEAR_ADVANTAGE
             else -> Recommendation.CHANGE
         }
         val preferred = if (recommendation == Recommendation.NO_CLEAR_ADVANTAGE) baseline.strategyId else best.strategyId
@@ -41,8 +44,8 @@ object SimulationEngine {
             VERSION, TAX_RULES_VERSION, baseline.strategyId, preferred, recommendation,
             when (recommendation) {
                 Recommendation.CHANGE -> "The selected strategy meets the specified cash needs and improves the objective under this deterministic scenario."
-                Recommendation.KEEP_BASELINE -> "The baseline meets the specified cash needs and has the highest terminal net value among the supplied strategies."
-                Recommendation.NO_CLEAR_ADVANTAGE -> "The terminal advantage does not exceed the requested threshold in today's PLN; keep the baseline."
+                Recommendation.KEEP_BASELINE -> "The baseline meets the modeled spending rule and has the highest comparison value among the supplied strategies."
+                Recommendation.NO_CLEAR_ADVANTAGE -> "The objective advantage does not exceed the requested threshold in today's PLN; keep the baseline."
                 Recommendation.WITHDRAWAL_SHORTFALL -> "Every supplied strategy has unmet withdrawals, overdue tax or terminal insolvency after settling outstanding liabilities. No feasible strategy was found."
             },
             results,
@@ -56,9 +59,21 @@ object SimulationEngine {
                 "Terminal liquidation is an analytical valuation at the final price, netting disposal gains against the final open tax year. It adds no simulated day and keeps the accrued OKI assessment unchanged.",
                 "For a partial final calendar year, OKI ownership is assumed to end at the horizon. Keeping an empty account until year-end would change the denominator and is not modeled; use a 31 December horizon for full-year comparisons.",
                 "Cash earns zero interest. Initial cash remains a spending/tax buffer; only unused new contributions are invested.",
+                "Annual percentage withdrawals are recalculated separately for each strategy on 1 January from current taxable equity, OKI equity and outside cash, after that day's due taxes and other scheduled flows but before the annual draw and daily returns. The cent-rounded base excludes no future tax liabilities.",
+                "The annual percentage specifies net household spending. Tax and sale fees are funded additionally from the same modeled assets. Monthly contributions stop no later than the day before annual withdrawals begin; explicit one-off cash flows remain in place.",
+                "Percentage withdrawals have no fixed income floor and may fall to zero while the strategy remains feasible. Feasibility does not establish an adequate retirement income; inspect the annual nominal and real withdrawal history.",
+                "AUTO compares real terminal wealth for fixed spending and cumulative real spending plus real terminal wealth when an annual withdrawal plan is present. Each payment is converted using CPI at payment and rounded to cents. Paid household cash earns no later modeled return; this sum applies no time discount beyond inflation or income-utility weighting.",
+                "There is no liquidation when annual withdrawals begin. Hypothetical liquidation remains an analytical valuation of residual assets at the final simulation end, after the modeled withdrawal period.",
             ),
+            effectiveComparisonObjective(request),
         )
     }
+}
+
+internal fun effectiveComparisonObjective(request: ComparisonRequest): ComparisonObjective = when (request.comparisonObjective) {
+    ComparisonObjective.AUTO -> if (request.annualWithdrawalPlan == null) ComparisonObjective.REAL_TERMINAL_WEALTH
+        else ComparisonObjective.REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH
+    else -> request.comparisonObjective
 }
 
 private val MC = MathContext.DECIMAL128
@@ -145,6 +160,16 @@ internal fun validateComparisonRequest(request: ComparisonRequest) {
     amount(request.monthlyPlan.withdrawalPln, "monthlyPlan.withdrawalPln")
     request.monthlyPlan.withdrawalFrom?.let(::date)
     request.monthlyPlan.contributionUntil?.let(::date)
+    request.annualWithdrawalPlan?.let { plan ->
+        val firstWithdrawal = date(plan.startDate)
+        require(firstWithdrawal >= start && firstWithdrawal.dayOfYear == 1) {
+            "Annual withdrawals must start on 1 January, no earlier than simulation startDate."
+        }
+        rate(plan.rate, "annualWithdrawalPlan.rate")
+        require(request.monthlyPlan.withdrawalPln.signum() == 0) {
+            "Choose annual percentage withdrawals or fixed monthly withdrawals; do not combine both policies."
+        }
+    }
     require(request.cashFlows.size <= 5000) { "Provide at most 5000 dated cash flows." }
     request.cashFlows.forEach {
         require(date(it.date) in start..end) { "Cash flow dates must fall within the simulation." }
@@ -164,7 +189,8 @@ private class Runner(private val request: ComparisonRequest, private val strateg
     private val cashFlows = request.cashFlows.groupBy { date(it.date) }
     private val monthly = request.monthlyPlan
     private val withdrawalFrom = monthly.withdrawalFrom?.let(::date) ?: start
-    private val contributionUntil = monthly.contributionUntil?.let(::date) ?: end
+    private val annualWithdrawalStart = request.annualWithdrawalPlan?.startDate?.let(::date)
+    private val contributionUntil = minOf(monthly.contributionUntil?.let(::date) ?: end, annualWithdrawalStart?.minusDays(1) ?: end)
     private val feeRate = BigDecimal.valueOf(request.tradingFeeRate)
     private val gainsRate = BigDecimal.valueOf(request.capitalGainsTaxRate)
     private val okiFraction = BigDecimal.valueOf(strategy.contributionToOkiFraction)
@@ -182,6 +208,7 @@ private class Runner(private val request: ComparisonRequest, private val strateg
     }.toMutableList()
     private var contributionTotal = ZERO
     private var withdrawalTotal = ZERO
+    private var realWithdrawalTotal = ZERO
     private var shortfallTotal = ZERO
     private var gainsTaxPaid = ZERO
     private var okiTaxPaid = ZERO
@@ -191,6 +218,7 @@ private class Runner(private val request: ComparisonRequest, private val strateg
     private var today = start
     private val events = mutableListOf<LedgerEvent>()
     private val years = mutableListOf<YearResult>()
+    private val annualWithdrawals = mutableListOf<AnnualWithdrawalResult>()
     private var transferResult: TransferResult? = null
 
     private fun taxableValue() = multiply(taxableUnits, price)
@@ -218,12 +246,15 @@ private class Runner(private val request: ComparisonRequest, private val strateg
             if (contribution.signum() > 0) log("CONTRIBUTION", "HOUSEHOLD", contribution)
             if (today == start) executeInitialTransfer()
             payTaxes()
-            if (withdrawal.signum() > 0) {
-                val paid = fundOutflow(withdrawal)
-                withdrawalTotal += paid
-                shortfallTotal += (withdrawal - paid).positive()
-                log("WITHDRAWAL", "HOUSEHOLD", paid)
-                if (withdrawal - paid > EPSILON) log("WITHDRAWAL_SHORTFALL", "HOUSEHOLD", withdrawal - paid)
+            payHouseholdWithdrawal(withdrawal)
+            if (annualWithdrawalStart != null && today >= annualWithdrawalStart && today.dayOfYear == 1) {
+                val portfolioValue = (taxableValue() + okiValue() + cash).money()
+                val rate = request.annualWithdrawalPlan!!.rate
+                val requested = multiply(portfolioValue, BigDecimal.valueOf(rate)).money()
+                val paid = payHouseholdWithdrawal(requested)
+                annualWithdrawals += AnnualWithdrawalResult(today.toString(), portfolioValue, rate, requested, paid.money(), ratio(paid, cpi).money())
+                log("ANNUAL_WITHDRAWAL_ASSESSMENT", "HOUSEHOLD", requested,
+                    note = "Current modeled market assets ${portfolioValue.toPlainString()} PLN; annual rate $rate. Tax and fees use additional portfolio resources.")
             }
             val investable = (cash - oldCash).positive()
             if (investable.signum() > 0) {
@@ -259,13 +290,34 @@ private class Runner(private val request: ComparisonRequest, private val strateg
         val terminalGain = multiply(taxableValue(), ONE - feeRate) - basis()
         val extraExitTax = gainsTax(gainYtd + terminalGain) - currentGainsTax
         val netValue = marketValue - outstanding - extraExitTax - exitFees
+        val realNetValue = ratio(netValue, cpi).money()
+        val realTotalBenefit = realWithdrawalTotal.money() + realNetValue
+        val comparisonValue = when (effectiveComparisonObjective(request)) {
+            ComparisonObjective.REAL_WITHDRAWALS_PLUS_TERMINAL_WEALTH -> realTotalBenefit
+            else -> realNetValue
+        }
         return StrategyResult(
             strategy.id, marketValue.money(), outstanding.money(), extraExitTax.money(), exitFees.money(),
-            netValue.money(), ratio(netValue, cpi).money(), ZERO.money(), contributionTotal.money(),
+            netValue.money(), realNetValue, ZERO.money(), contributionTotal.money(),
             withdrawalTotal.money(), shortfallTotal.money(),
             pending.filter { it.due <= end }.fold(ZERO) { sum, liability -> sum + liability.amount }.money(),
             gainsTaxPaid.money(), okiTaxPaid.money(), feeTotal.money(), transferResult, years, events,
+            realWithdrawalsPaidPln = realWithdrawalTotal.money(),
+            realTotalBenefitPln = realTotalBenefit,
+            comparisonValuePln = comparisonValue,
+            annualWithdrawals = annualWithdrawals,
         )
+    }
+
+    private fun payHouseholdWithdrawal(requested: BigDecimal): BigDecimal {
+        if (requested.signum() <= 0) return ZERO
+        val paid = fundOutflow(requested)
+        withdrawalTotal += paid
+        realWithdrawalTotal += ratio(paid, cpi).money()
+        shortfallTotal += (requested - paid).positive()
+        log("WITHDRAWAL", "HOUSEHOLD", paid)
+        if (requested - paid > EPSILON) log("WITHDRAWAL_SHORTFALL", "HOUSEHOLD", requested - paid)
+        return paid
     }
 
     private fun flowForToday(): Pair<BigDecimal, BigDecimal> {

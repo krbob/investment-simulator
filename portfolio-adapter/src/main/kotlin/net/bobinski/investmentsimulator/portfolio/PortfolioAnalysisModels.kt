@@ -4,7 +4,9 @@ package net.bobinski.investmentsimulator.portfolio
 
 import java.math.BigDecimal
 import kotlinx.serialization.Serializable
+import net.bobinski.investmentsimulator.engine.AnnualWithdrawalPlan
 import net.bobinski.investmentsimulator.engine.CashFlow
+import net.bobinski.investmentsimulator.engine.ComparisonObjective
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.ComparisonResult
 import net.bobinski.investmentsimulator.engine.MonthlyPlan
@@ -32,6 +34,8 @@ data class PortfolioAnalysisPlan(
     val taxStateAsOfDate: String? = null,
     // Nonzero losses cannot be silently ignored by this version of the simulation engine.
     val lossCarryforwardPln: BigDecimal = BigDecimal.ZERO,
+    val annualWithdrawalPlan: AnnualWithdrawalPlan? = null,
+    val comparisonObjective: ComparisonObjective = ComparisonObjective.AUTO,
 )
 
 @Serializable
