@@ -1,0 +1,1522 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Investment Simulator API",
+        "version": "0.1.0",
+        "description": "Deterministic comparisons of a taxable brokerage account and OKI for one accumulating global equity exposure. All money and source quantities use decimal JSON strings. Rates are decimal fractions (0.0085 = 0.85%). Future returns, inflation and OKI rates are supplied explicitly. No OKI asset allowance is applied. Bodies are limited to 2097152 bytes. The default listener is 127.0.0.1:8080."
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:8080"
+        }
+    ],
+    "paths": {
+        "/health": {
+            "get": {
+                "operationId": "health",
+                "summary": "Check that the process is running",
+                "responses": {
+                    "200": {
+                        "description": "Process is running",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/openapi.json": {
+            "get": {
+                "operationId": "openApi",
+                "summary": "Read this OpenAPI contract",
+                "responses": {
+                    "200": {
+                        "description": "OpenAPI 3.1 document",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/strategy-comparisons": {
+            "post": {
+                "operationId": "compareStrategies",
+                "summary": "Compare strategies against one baseline on the same deterministic market path",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ComparisonRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful calculation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ComparisonResult"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, input or unsupported portfolio data",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request exceeds the body size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be application/json",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/portfolio/snapshots": {
+            "post": {
+                "operationId": "importPortfolioSnapshot",
+                "summary": "Map supplied portfolio API exports into initial balances and FIFO tax lots",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PortfolioSnapshotRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful calculation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PortfolioSnapshotResult"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, input or unsupported portfolio data",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request exceeds the body size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be application/json",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "HealthResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [],
+                "additionalProperties": false
+            },
+            "ErrorResponse": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code",
+                    "message"
+                ],
+                "additionalProperties": false
+            },
+            "ComparisonRequest": {
+                "type": "object",
+                "properties": {
+                    "startDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "initial": {
+                        "$ref": "#/components/schemas/InitialPortfolio"
+                    },
+                    "assumptions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/YearAssumptions"
+                        }
+                    },
+                    "strategies": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Strategy"
+                        }
+                    },
+                    "monthlyPlan": {
+                        "$ref": "#/components/schemas/MonthlyPlan"
+                    },
+                    "cashFlows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CashFlow"
+                        }
+                    },
+                    "tradingFeeRate": {
+                        "type": "number"
+                    },
+                    "capitalGainsTaxRate": {
+                        "type": "number"
+                    },
+                    "baselineStrategyId": {
+                        "type": "string"
+                    },
+                    "minimumAdvantagePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "includeLedger": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "startDate",
+                    "endDate",
+                    "initial",
+                    "assumptions",
+                    "strategies",
+                    "baselineStrategyId"
+                ],
+                "additionalProperties": false
+            },
+            "InitialPortfolio": {
+                "type": "object",
+                "properties": {
+                    "taxableLots": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaxLot"
+                        }
+                    },
+                    "okiValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "cashPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiOpenedOn": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "taxState": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/OpeningTaxState"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [],
+                "additionalProperties": false
+            },
+            "TaxLot": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "acquiredOn": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "marketValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "costBasisPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "acquiredOn",
+                    "marketValuePln",
+                    "costBasisPln"
+                ],
+                "additionalProperties": false
+            },
+            "OpeningTaxState": {
+                "type": "object",
+                "properties": {
+                    "realizedGainPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiValueDaysPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "liabilities": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaxLiability"
+                        }
+                    }
+                },
+                "required": [],
+                "additionalProperties": false
+            },
+            "TaxLiability": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "CAPITAL_GAINS",
+                            "OKI_ASSETS"
+                        ]
+                    },
+                    "taxYear": {
+                        "type": "integer"
+                    },
+                    "dueDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "amountPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "kind",
+                    "taxYear",
+                    "dueDate",
+                    "amountPln"
+                ],
+                "additionalProperties": false
+            },
+            "YearAssumptions": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer"
+                    },
+                    "equityReturnRate": {
+                        "type": "number"
+                    },
+                    "inflationRate": {
+                        "type": "number"
+                    },
+                    "okiTaxRate": {
+                        "type": "number"
+                    },
+                    "okiRateStatus": {
+                        "type": "string",
+                        "enum": [
+                            "ESTABLISHED",
+                            "ASSUMED"
+                        ]
+                    }
+                },
+                "required": [
+                    "year",
+                    "equityReturnRate",
+                    "inflationRate",
+                    "okiTaxRate"
+                ],
+                "additionalProperties": false
+            },
+            "Strategy": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "contributionToOkiFraction": {
+                        "type": "number"
+                    },
+                    "withdrawalOrder": {
+                        "type": "string",
+                        "enum": [
+                            "TAXABLE_FIRST",
+                            "OKI_FIRST",
+                            "PROPORTIONAL"
+                        ]
+                    },
+                    "initialTransfer": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/TransferPlan"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "contributionToOkiFraction"
+                ],
+                "additionalProperties": false
+            },
+            "TransferPlan": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "TAXABLE_TO_OKI",
+                            "OKI_TO_TAXABLE"
+                        ]
+                    },
+                    "fraction": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "direction",
+                    "fraction"
+                ],
+                "additionalProperties": false
+            },
+            "MonthlyPlan": {
+                "type": "object",
+                "properties": {
+                    "contributionPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalFrom": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "dayOfMonth": {
+                        "type": "integer"
+                    },
+                    "indexContributions": {
+                        "type": "boolean"
+                    },
+                    "indexWithdrawals": {
+                        "type": "boolean"
+                    },
+                    "contributionUntil": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    }
+                },
+                "required": [],
+                "additionalProperties": false
+            },
+            "CashFlow": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "contributionPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "date"
+                ],
+                "additionalProperties": false
+            },
+            "ComparisonResult": {
+                "type": "object",
+                "properties": {
+                    "engineVersion": {
+                        "type": "string"
+                    },
+                    "taxRulesVersion": {
+                        "type": "string"
+                    },
+                    "baselineStrategyId": {
+                        "type": "string"
+                    },
+                    "preferredStrategyId": {
+                        "type": "string"
+                    },
+                    "recommendation": {
+                        "type": "string",
+                        "enum": [
+                            "CHANGE",
+                            "KEEP_BASELINE",
+                            "NO_CLEAR_ADVANTAGE",
+                            "WITHDRAWAL_SHORTFALL"
+                        ]
+                    },
+                    "explanation": {
+                        "type": "string"
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StrategyResult"
+                        }
+                    },
+                    "limitations": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "engineVersion",
+                    "taxRulesVersion",
+                    "baselineStrategyId",
+                    "preferredStrategyId",
+                    "recommendation",
+                    "explanation",
+                    "results",
+                    "limitations"
+                ],
+                "additionalProperties": false
+            },
+            "StrategyResult": {
+                "type": "object",
+                "properties": {
+                    "strategyId": {
+                        "type": "string"
+                    },
+                    "marketValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "outstandingTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "liquidationTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "liquidationFeesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "netLiquidationValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realNetLiquidationValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "advantageVsBaselinePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "contributionsPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalsPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalShortfallPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "unpaidTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "capitalGainsTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "tradingFeesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "initialTransfer": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/TransferResult"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "yearly": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/YearResult"
+                        }
+                    },
+                    "ledger": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LedgerEvent"
+                        }
+                    }
+                },
+                "required": [
+                    "strategyId",
+                    "marketValuePln",
+                    "outstandingTaxPln",
+                    "liquidationTaxPln",
+                    "liquidationFeesPln",
+                    "netLiquidationValuePln",
+                    "realNetLiquidationValuePln",
+                    "advantageVsBaselinePln",
+                    "contributionsPln",
+                    "withdrawalsPaidPln",
+                    "withdrawalShortfallPln",
+                    "unpaidTaxPln",
+                    "capitalGainsTaxPaidPln",
+                    "okiTaxPaidPln",
+                    "tradingFeesPln",
+                    "initialTransfer",
+                    "yearly",
+                    "ledger"
+                ],
+                "additionalProperties": false
+            },
+            "TransferResult": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "TAXABLE_TO_OKI",
+                            "OKI_TO_TAXABLE"
+                        ]
+                    },
+                    "grossSoldPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realizedGainPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "estimatedAdditionalCapitalGainsTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "proceedsTransferredPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "purchasedValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "feesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "direction",
+                    "grossSoldPln",
+                    "realizedGainPln",
+                    "estimatedAdditionalCapitalGainsTaxPln",
+                    "proceedsTransferredPln",
+                    "purchasedValuePln",
+                    "feesPln"
+                ],
+                "additionalProperties": false
+            },
+            "YearResult": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer"
+                    },
+                    "throughDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "taxableValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "taxableCostBasisPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "cashPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realizedGainPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiAverageTaxBasePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "capitalGainsTaxAssessedPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiTaxAssessedPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "year",
+                    "throughDate",
+                    "taxableValuePln",
+                    "taxableCostBasisPln",
+                    "okiValuePln",
+                    "cashPln",
+                    "realizedGainPln",
+                    "okiAverageTaxBasePln",
+                    "capitalGainsTaxAssessedPln",
+                    "okiTaxAssessedPln"
+                ],
+                "additionalProperties": false
+            },
+            "LedgerEvent": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "account": {
+                        "type": "string"
+                    },
+                    "amountPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "realizedGainPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "note": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "date",
+                    "type",
+                    "account",
+                    "amountPln"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioSnapshotRequest": {
+                "type": "object",
+                "properties": {
+                    "snapshot": {
+                        "$ref": "#/components/schemas/PortfolioStateExport"
+                    },
+                    "holdings": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioHolding"
+                        }
+                    },
+                    "accountSummaries": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioAccountBalance"
+                        }
+                    },
+                    "selection": {
+                        "$ref": "#/components/schemas/PortfolioSelection"
+                    },
+                    "verifiedPurchaseCostsPln": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PurchaseCostOverride"
+                        }
+                    },
+                    "okiOpenedOn": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "openingTaxState": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/OpeningTaxState"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "snapshot",
+                    "holdings",
+                    "accountSummaries",
+                    "selection"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioStateExport": {
+                "type": "object",
+                "properties": {
+                    "schemaVersion": {
+                        "type": "integer"
+                    },
+                    "exportedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "accounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioAccount"
+                        }
+                    },
+                    "instruments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioInstrument"
+                        }
+                    },
+                    "transactions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioTransaction"
+                        }
+                    }
+                },
+                "required": [
+                    "schemaVersion",
+                    "exportedAt",
+                    "accounts",
+                    "instruments",
+                    "transactions"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioAccount": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "baseCurrency": {
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "baseCurrency",
+                    "isActive"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioInstrument": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "assetClass": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "isActive": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "assetClass",
+                    "symbol",
+                    "currency",
+                    "isActive"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioTransaction": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "instrumentId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "type": {
+                        "type": "string"
+                    },
+                    "tradeDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "quantity": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "grossAmount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "feeAmount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "taxAmount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "fxRateToPln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "id",
+                    "accountId",
+                    "type",
+                    "tradeDate",
+                    "grossAmount",
+                    "feeAmount",
+                    "taxAmount",
+                    "currency",
+                    "createdAt"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioHolding": {
+                "type": "object",
+                "properties": {
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "instrumentId": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "assetClass": {
+                        "type": "string"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "currentValuePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "valuedAt": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "format": "date"
+                    },
+                    "valuationStatus": {
+                        "type": "string"
+                    },
+                    "valuationIssue": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "accountId",
+                    "instrumentId",
+                    "kind",
+                    "assetClass",
+                    "currency",
+                    "quantity",
+                    "currentValuePln",
+                    "valuedAt",
+                    "valuationStatus"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioAccountBalance": {
+                "type": "object",
+                "properties": {
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "valuationState": {
+                        "type": "string"
+                    },
+                    "cashBalancePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "cashBalances": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PortfolioCurrencyBalance"
+                        }
+                    }
+                },
+                "required": [
+                    "accountId",
+                    "valuationState",
+                    "cashBalancePln",
+                    "cashBalances"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioCurrencyBalance": {
+                "type": "object",
+                "properties": {
+                    "currency": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    }
+                },
+                "required": [
+                    "currency",
+                    "amount"
+                ],
+                "additionalProperties": true
+            },
+            "PortfolioSelection": {
+                "type": "object",
+                "properties": {
+                    "taxableAccountId": {
+                        "type": "string"
+                    },
+                    "instrumentId": {
+                        "type": "string"
+                    },
+                    "okiAccountId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "taxableAccountId",
+                    "instrumentId"
+                ],
+                "additionalProperties": false
+            },
+            "PurchaseCostOverride": {
+                "type": "object",
+                "properties": {
+                    "transactionId": {
+                        "type": "string"
+                    },
+                    "costBasisPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "source": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "transactionId",
+                    "costBasisPln",
+                    "source"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioSnapshotResult": {
+                "type": "object",
+                "properties": {
+                    "initial": {
+                        "$ref": "#/components/schemas/InitialPortfolio"
+                    },
+                    "source": {
+                        "$ref": "#/components/schemas/PortfolioSnapshotProvenance"
+                    },
+                    "warnings": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "initial",
+                    "source",
+                    "warnings"
+                ],
+                "additionalProperties": false
+            },
+            "PortfolioSnapshotProvenance": {
+                "type": "object",
+                "properties": {
+                    "exportedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "sourceAsOfDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "snapshotSchemaVersion": {
+                        "type": "integer"
+                    },
+                    "taxableAccountId": {
+                        "type": "string"
+                    },
+                    "okiAccountId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "instrumentId": {
+                        "type": "string"
+                    },
+                    "symbol": {
+                        "type": "string"
+                    },
+                    "valuationDates": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "requestSha256": {
+                        "type": "string"
+                    },
+                    "acquisitionCostSources": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PurchaseCostOverride"
+                        }
+                    }
+                },
+                "required": [
+                    "exportedAt",
+                    "sourceAsOfDate",
+                    "snapshotSchemaVersion",
+                    "taxableAccountId",
+                    "okiAccountId",
+                    "instrumentId",
+                    "symbol",
+                    "valuationDates",
+                    "requestSha256",
+                    "acquisitionCostSources"
+                ],
+                "additionalProperties": false
+            }
+        }
+    }
+}

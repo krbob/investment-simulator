@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+.idea/
+*.iml
+.DS_Store
+.env
+*.local.json
+.venv*/
+__pycache__/
+*.pyc
+# Local files created by the Portfolio capture example.
+/settings.json
+/portfolio-bundle.json

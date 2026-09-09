@@ -1,0 +1,116 @@
+{
+  "snapshot": {
+    "schemaVersion": 5,
+    "exportedAt": "2026-09-09T12:00:00Z",
+    "accounts": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Synthetic taxable brokerage",
+        "institution": "Synthetic broker",
+        "type": "BROKERAGE",
+        "baseCurrency": "PLN",
+        "isActive": true
+      }
+    ],
+    "instruments": [
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Synthetic accumulating global equity ETF",
+        "kind": "ETF",
+        "assetClass": "EQUITIES",
+        "symbol": "VWRA.L",
+        "currency": "USD",
+        "valuationSource": "STOCK_ANALYST",
+        "isActive": true
+      }
+    ],
+    "transactions": [
+      {
+        "id": "00000000-0000-0000-0000-000000000010",
+        "accountId": "00000000-0000-0000-0000-000000000001",
+        "type": "DEPOSIT",
+        "tradeDate": "2026-01-01",
+        "grossAmount": "1000",
+        "feeAmount": "0",
+        "taxAmount": "0",
+        "currency": "PLN",
+        "createdAt": "2026-01-01T12:00:00Z"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000011",
+        "accountId": "00000000-0000-0000-0000-000000000001",
+        "instrumentId": "00000000-0000-0000-0000-000000000002",
+        "type": "BUY",
+        "tradeDate": "2026-01-10",
+        "quantity": "10",
+        "unitPrice": "10",
+        "grossAmount": "100",
+        "feeAmount": "10",
+        "taxAmount": "0",
+        "currency": "PLN",
+        "createdAt": "2026-01-10T12:00:00Z"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000012",
+        "accountId": "00000000-0000-0000-0000-000000000001",
+        "instrumentId": "00000000-0000-0000-0000-000000000002",
+        "type": "BUY",
+        "tradeDate": "2026-02-10",
+        "quantity": "5",
+        "unitPrice": "20",
+        "grossAmount": "100",
+        "feeAmount": "0",
+        "taxAmount": "0",
+        "currency": "PLN",
+        "createdAt": "2026-02-10T12:00:00Z"
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000013",
+        "accountId": "00000000-0000-0000-0000-000000000001",
+        "instrumentId": "00000000-0000-0000-0000-000000000002",
+        "type": "SELL",
+        "tradeDate": "2026-03-01",
+        "quantity": "12",
+        "unitPrice": "30",
+        "grossAmount": "360",
+        "feeAmount": "0",
+        "taxAmount": "0",
+        "currency": "PLN",
+        "createdAt": "2026-03-01T12:00:00Z"
+      }
+    ],
+    "appPreferences": [],
+    "targetSchedule": [],
+    "importProfiles": []
+  },
+  "holdings": [
+    {
+      "accountId": "00000000-0000-0000-0000-000000000001",
+      "instrumentId": "00000000-0000-0000-0000-000000000002",
+      "kind": "ETF",
+      "assetClass": "EQUITIES",
+      "currency": "USD",
+      "quantity": "3",
+      "costBasisPln": "42.00",
+      "currentPricePln": "40.00",
+      "currentValuePln": "120.00",
+      "valuedAt": "2026-09-09",
+      "valuationStatus": "VALUED",
+      "valuationIssue": null
+    }
+  ],
+  "accountSummaries": [
+    {
+      "accountId": "00000000-0000-0000-0000-000000000001",
+      "valuationState": "MARK_TO_MARKET",
+      "cashBalancePln": "1150.00",
+      "cashBalances": [
+        { "currency": "PLN", "amount": "1150.00", "bookValuePln": "1150.00" }
+      ]
+    }
+  ],
+  "selection": {
+    "taxableAccountId": "00000000-0000-0000-0000-000000000001",
+    "instrumentId": "00000000-0000-0000-0000-000000000002"
+  }
+}
