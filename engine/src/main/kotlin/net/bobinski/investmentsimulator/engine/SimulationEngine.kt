@@ -13,7 +13,7 @@ object SimulationEngine {
     const val TAX_RULES_VERSION = "PL-2026-1098-global-equity-v1"
 
     fun compare(request: ComparisonRequest): ComparisonResult {
-        validate(request)
+        validateComparisonRequest(request)
         val runs = request.strategies.map { Runner(request, it).run() }
         val baseline = runs.first { it.strategyId == request.baselineStrategyId }
         val results = runs.map {
@@ -75,7 +75,7 @@ private fun date(value: String): LocalDate = try {
     throw IllegalArgumentException("Invalid ISO date: $value", exception)
 }
 
-private fun validate(request: ComparisonRequest) {
+internal fun validateComparisonRequest(request: ComparisonRequest) {
     val start = date(request.startDate)
     val end = date(request.endDate)
     require(start.year >= 2027 && end >= start && end <= start.plusYears(50).minusDays(1)) {

@@ -130,6 +130,27 @@ results without mixing historical read models with forward tax projections.
 
 ## Research experiments
 
+The `sensitivity` command and `POST /v1/sensitivity-analyses` evaluate a bounded grid around an
+existing comparison request, including the `resolvedRequest` returned by Portfolio analysis.
+Each cell uses the same accounting engine. Additive return/inflation shifts and shifts to
+**ASSUMED** OKI rates preserve the supplied annual path; **ESTABLISHED** OKI rates stay fixed.
+Shorter horizons retain the original dates of the household plan.
+
+```sh
+build/install/investment-simulator/bin/investment-simulator sensitivity \
+  examples/sensitivity.json > sensitivity.local.json
+python3 scripts/render-sensitivity.py \
+  --input sensitivity.local.json --output sensitivity.local.html
+```
+
+Open the standalone HTML locally for a selectable horizon/inflation slice, a strategy map,
+per-cell financial details, per-horizon strategy counts and observed transition brackets.
+The report requires no external services or Python packages. Counts describe sampled grid
+cells, not probabilities; brackets are not interpolated exact break-even rates.
+See the [sensitivity guide](docs/sensitivity-analysis.md) for axes, limits and exact cell replay.
+
+### Fixed research sweeps
+
 After `installDist`, generate the three parameter sweeps with the JVM entry point:
 
 ```sh
@@ -155,4 +176,6 @@ Tests include independently calculated migration PIT, same-year loss netting, FI
 dates, taxes financed by sales, daily OKI ownership denominators, actual same-day cash round trips,
 tax-base rounding, budget conservation, Portfolio reconciliation, data-gap handling, exact replay
 and HTTP/CLI contracts. GitHub Actions runs these checks, builds the distribution, and exercises
-the packaged CLI against synthetic examples. CI uses no Portfolio credentials or investor data.
+the packaged CLI against synthetic examples, including sensitivity replay and HTML report generation.
+Sensitivity tests cover rate preservation, horizons, feasibility, sampled transitions and runtime
+bounds. CI uses no Portfolio credentials or investor data.

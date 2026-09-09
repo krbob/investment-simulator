@@ -12,6 +12,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
 import net.bobinski.investmentsimulator.engine.ComparisonResult
+import net.bobinski.investmentsimulator.engine.SensitivityAnalysis
+import net.bobinski.investmentsimulator.engine.SensitivityRequest
+import net.bobinski.investmentsimulator.engine.SensitivityResult
 import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisRequest
 import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisResult
 import net.bobinski.investmentsimulator.portfolio.PortfolioSnapshotRequest
@@ -24,6 +27,8 @@ fun openApiDocument(): String {
     val error = schemas.schema(ErrorResponse.serializer().descriptor)
     val comparisonRequest = schemas.schema(ComparisonRequest.serializer().descriptor)
     val comparisonResult = schemas.schema(ComparisonResult.serializer().descriptor)
+    val sensitivityRequest = schemas.schema(SensitivityRequest.serializer().descriptor)
+    val sensitivityResult = schemas.schema(SensitivityResult.serializer().descriptor)
     val snapshotRequest = schemas.schema(PortfolioSnapshotRequest.serializer().descriptor)
     val snapshotResult = schemas.schema(PortfolioSnapshotResult.serializer().descriptor)
     val analysisRequest = schemas.schema(PortfolioAnalysisRequest.serializer().descriptor)
@@ -59,6 +64,22 @@ fun openApiDocument(): String {
                 comparisonResult,
                 error,
             )),
+            "/v1/sensitivity-analyses" to obj("post" to operation(
+                "analyzeSensitivity",
+                "Compare a deterministic grid of additive rate shifts and shorter horizons",
+                sensitivityRequest,
+                sensitivityResult,
+                error,
+                successDescription = "Complete grid; scenario frequencies are not probabilities and transitions bracket adjacent samples only",
+                badRequestDescription = "Invalid JSON, invalid scenario, or exceeded grid limit; no partial result is returned",
+                description = "Each axis supports at most ${SensitivityAnalysis.MAX_AXIS_VALUES} values. " +
+                    "The grid supports at most ${SensitivityAnalysis.MAX_SCENARIOS} scenarios and " +
+                    "${SensitivityAnalysis.MAX_STRATEGY_DAYS} total simulated strategy-days. " +
+                    "Opening tax-lot replays across scenarios and strategies are limited to ${SensitivityAnalysis.MAX_OPENING_LOT_REPLAYS}. " +
+                    "Rate shifts are additive decimal fractions (0.01 = one percentage point); established OKI rates remain unchanged. " +
+                    "Each horizon must end on 31 December and cannot extend beyond the base request. " +
+                    "The entire grid is validated before simulation. Results group strategy summaries by horizon.",
+            )),
             "/v1/portfolio/snapshots" to obj("post" to operation(
                 "importPortfolioSnapshot",
                 "Map supplied portfolio API exports into initial balances and FIFO tax lots",
@@ -89,9 +110,11 @@ private fun operation(
     errorSchema: JsonObject,
     successDescription: String = "Successful calculation",
     badRequestDescription: String = "Invalid JSON, input or unsupported portfolio data",
+    description: String = summary,
 ) = obj(
     "operationId" to str(id),
     "summary" to str(summary),
+    "description" to str(description),
     "requestBody" to obj(
         "required" to JsonPrimitive(true),
         "content" to jsonContent(requestSchema),

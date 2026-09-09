@@ -51,6 +51,7 @@
             "post": {
                 "operationId": "compareStrategies",
                 "summary": "Compare strategies against one baseline on the same deterministic market path",
+                "description": "Compare strategies against one baseline on the same deterministic market path",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -105,10 +106,70 @@
                 }
             }
         },
+        "/v1/sensitivity-analyses": {
+            "post": {
+                "operationId": "analyzeSensitivity",
+                "summary": "Compare a deterministic grid of additive rate shifts and shorter horizons",
+                "description": "Each axis supports at most 16 values. The grid supports at most 128 scenarios and 2000000 total simulated strategy-days. Opening tax-lot replays across scenarios and strategies are limited to 250000. Rate shifts are additive decimal fractions (0.01 = one percentage point); established OKI rates remain unchanged. Each horizon must end on 31 December and cannot extend beyond the base request. The entire grid is validated before simulation. Results group strategy summaries by horizon.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SensitivityRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Complete grid; scenario frequencies are not probabilities and transitions bracket adjacent samples only",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SensitivityResult"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON, invalid scenario, or exceeded grid limit; no partial result is returned",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request exceeds the body size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be application/json",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/portfolio/snapshots": {
             "post": {
                 "operationId": "importPortfolioSnapshot",
                 "summary": "Map supplied portfolio API exports into initial balances and FIFO tax lots",
+                "description": "Map supplied portfolio API exports into initial balances and FIFO tax lots",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -167,6 +228,7 @@
             "post": {
                 "operationId": "analyzePortfolio",
                 "summary": "Compare standard strategies for supplied Portfolio data and an investment plan",
+                "description": "Compare standard strategies for supplied Portfolio data and an investment plan",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -1044,6 +1106,505 @@
                     "type",
                     "account",
                     "amountPln"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityRequest": {
+                "type": "object",
+                "properties": {
+                    "baseRequest": {
+                        "$ref": "#/components/schemas/ComparisonRequest"
+                    },
+                    "axes": {
+                        "$ref": "#/components/schemas/SensitivityAxes"
+                    }
+                },
+                "required": [
+                    "baseRequest"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityAxes": {
+                "type": "object",
+                "properties": {
+                    "equityReturnRateShifts": {
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    },
+                    "inflationRateShifts": {
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    },
+                    "assumedOkiTaxRateShifts": {
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        }
+                    },
+                    "endDates": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [],
+                "additionalProperties": false
+            },
+            "SensitivityResult": {
+                "type": "object",
+                "properties": {
+                    "sensitivityVersion": {
+                        "type": "string"
+                    },
+                    "engineVersion": {
+                        "type": "string"
+                    },
+                    "taxRulesVersion": {
+                        "type": "string"
+                    },
+                    "request": {
+                        "$ref": "#/components/schemas/SensitivityRequest"
+                    },
+                    "scenarioCount": {
+                        "type": "integer"
+                    },
+                    "evaluatedStrategyDays": {
+                        "type": "integer"
+                    },
+                    "allInfeasibleScenarioCount": {
+                        "type": "integer"
+                    },
+                    "scenarios": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SensitivityScenario"
+                        }
+                    },
+                    "strategySummaries": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SensitivityStrategySummary"
+                        }
+                    },
+                    "transitions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SensitivityTransition"
+                        }
+                    },
+                    "limitations": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "sensitivityVersion",
+                    "engineVersion",
+                    "taxRulesVersion",
+                    "request",
+                    "scenarioCount",
+                    "evaluatedStrategyDays",
+                    "allInfeasibleScenarioCount",
+                    "scenarios",
+                    "strategySummaries",
+                    "transitions",
+                    "limitations"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityScenario": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "$ref": "#/components/schemas/SensitivityCoordinates"
+                    },
+                    "preservedEstablishedOkiYears": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "shiftedAssumedOkiYears": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "omittedCashFlowCount": {
+                        "type": "integer"
+                    },
+                    "preferredStrategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "highestValueStrategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "recommendation": {
+                        "type": "string",
+                        "enum": [
+                            "CHANGE",
+                            "KEEP_BASELINE",
+                            "NO_CLEAR_ADVANTAGE",
+                            "WITHDRAWAL_SHORTFALL"
+                        ]
+                    },
+                    "strategies": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SensitivityStrategyResult"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "coordinates",
+                    "preservedEstablishedOkiYears",
+                    "shiftedAssumedOkiYears",
+                    "omittedCashFlowCount",
+                    "preferredStrategyId",
+                    "highestValueStrategyId",
+                    "recommendation",
+                    "strategies"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityCoordinates": {
+                "type": "object",
+                "properties": {
+                    "equityReturnRateShift": {
+                        "type": "number"
+                    },
+                    "inflationRateShift": {
+                        "type": "number"
+                    },
+                    "assumedOkiTaxRateShift": {
+                        "type": "number"
+                    },
+                    "endDate": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "equityReturnRateShift",
+                    "inflationRateShift",
+                    "assumedOkiTaxRateShift",
+                    "endDate"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityStrategyResult": {
+                "type": "object",
+                "properties": {
+                    "strategyId": {
+                        "type": "string"
+                    },
+                    "feasible": {
+                        "type": "boolean"
+                    },
+                    "realNetLiquidationValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "netLiquidationValuePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "advantageVsBaselinePln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "regretVsBestFeasiblePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "contributionsPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalsPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "withdrawalShortfallPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "unpaidTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "outstandingTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "liquidationTaxPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "liquidationFeesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "capitalGainsTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "okiTaxPaidPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "tradingFeesPln": {
+                        "type": "string",
+                        "format": "decimal",
+                        "description": "Exact decimal represented as a JSON string.",
+                        "examples": [
+                            "1000.00"
+                        ]
+                    },
+                    "initialTransfer": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/TransferResult"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "strategyId",
+                    "feasible",
+                    "realNetLiquidationValuePln",
+                    "netLiquidationValuePln",
+                    "advantageVsBaselinePln",
+                    "regretVsBestFeasiblePln",
+                    "contributionsPln",
+                    "withdrawalsPaidPln",
+                    "withdrawalShortfallPln",
+                    "unpaidTaxPln",
+                    "outstandingTaxPln",
+                    "liquidationTaxPln",
+                    "liquidationFeesPln",
+                    "capitalGainsTaxPaidPln",
+                    "okiTaxPaidPln",
+                    "tradingFeesPln",
+                    "initialTransfer"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityStrategySummary": {
+                "type": "object",
+                "properties": {
+                    "endDate": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "strategyId": {
+                        "type": "string"
+                    },
+                    "scenarioCount": {
+                        "type": "integer"
+                    },
+                    "feasibleScenarioCount": {
+                        "type": "integer"
+                    },
+                    "preferredScenarioCount": {
+                        "type": "integer"
+                    },
+                    "highestValueScenarioCount": {
+                        "type": "integer"
+                    },
+                    "comparableToBaselineScenarioCount": {
+                        "type": "integer"
+                    },
+                    "minimumAdvantageVsBaselinePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumAdvantageVsBaselinePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "maximumRegretVsBestFeasiblePln": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "decimal",
+                                "description": "Exact decimal represented as a JSON string.",
+                                "examples": [
+                                    "1000.00"
+                                ]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "endDate",
+                    "strategyId",
+                    "scenarioCount",
+                    "feasibleScenarioCount",
+                    "preferredScenarioCount",
+                    "highestValueScenarioCount",
+                    "comparableToBaselineScenarioCount",
+                    "minimumAdvantageVsBaselinePln",
+                    "maximumAdvantageVsBaselinePln",
+                    "maximumRegretVsBestFeasiblePln"
+                ],
+                "additionalProperties": false
+            },
+            "SensitivityTransition": {
+                "type": "object",
+                "properties": {
+                    "axis": {
+                        "type": "string",
+                        "enum": [
+                            "EQUITY_RETURN_RATE_SHIFT",
+                            "INFLATION_RATE_SHIFT",
+                            "ASSUMED_OKI_TAX_RATE_SHIFT",
+                            "END_DATE"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "PREFERRED_STRATEGY_CHANGE",
+                            "BASELINE_BREAK_EVEN",
+                            "MINIMUM_ADVANTAGE_CROSSING",
+                            "FEASIBILITY_CHANGE"
+                        ]
+                    },
+                    "fromScenarioId": {
+                        "type": "string"
+                    },
+                    "toScenarioId": {
+                        "type": "string"
+                    },
+                    "strategyId": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "axis",
+                    "kind",
+                    "fromScenarioId",
+                    "toScenarioId"
                 ],
                 "additionalProperties": false
             },

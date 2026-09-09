@@ -79,10 +79,10 @@ jobs:
 
           cli = "build/install/investment-simulator/bin/investment-simulator"
 
-          def run_cli(command, payload, expected_exit=0):
+          def run_cli(command, payload, expected_exit=0, extra_args=()):
               completed = subprocess.run(
-                  [cli, command, "-"], input=json.dumps(payload),
-                  text=True, capture_output=True, timeout=60,
+                  [cli, command, "-", *extra_args], input=json.dumps(payload),
+                  text=True, capture_output=True, timeout=180,
               )
               assert completed.returncode == expected_exit, completed.stderr
               return json.loads(completed.stdout)
@@ -110,5 +110,39 @@ jobs:
           assert "MISSING_TAX_STATE" in {gap["code"] for gap in incomplete["dataGaps"]}
           assert incomplete.get("comparison") is None, "Missing tax data must block recommendations"
           assert incomplete.get("resolvedRequest") is None
-          print("Distributed CLI verified migration tax, reproducible Portfolio analysis, missing-data handling and OpenAPI.")
+
+          sensitivity_request = json.loads(Path("examples/sensitivity.json").read_text())
+          sensitivity = run_cli("sensitivity", sensitivity_request)
+          assert sensitivity["scenarioCount"] == len(sensitivity["scenarios"]) > 1
+          assert sensitivity["strategySummaries"]
+          assert sensitivity["limitations"]
+          sensitivity_json = temporary / "sensitivity.json"
+          sensitivity_json.write_text(json.dumps(sensitivity))
+          subprocess.run([
+              "python3", "scripts/render-sensitivity.py", "--input", str(sensitivity_json),
+              "--output", str(temporary / "sensitivity.html"),
+          ], check=True, timeout=30)
+          scenario = sensitivity["scenarios"][-1]
+          resolved = run_cli("sensitivity-scenario", sensitivity_request, extra_args=(scenario["id"],))
+          assert resolved["endDate"] == scenario["coordinates"]["endDate"]
+          replay = run_cli("compare", resolved)
+          replay_results = {item["strategyId"]: item for item in replay["results"]}
+          assert replay["recommendation"] == scenario["recommendation"]
+          if scenario["preferredStrategyId"] is not None:
+              assert replay["preferredStrategyId"] == scenario["preferredStrategyId"]
+          for summary in scenario["strategies"]:
+              full = replay_results[summary["strategyId"]]
+              for key, value in summary.items():
+                  if key in full:
+                      assert value == full[key], f"Sensitivity replay changed {summary['strategyId']}.{key}"
+
+          invalid_grid = dict(sensitivity_request, axes={"equityReturnRateShifts": [index / 1000 for index in range(17)]})
+          rejected = subprocess.run(
+              [cli, "sensitivity", "-"], input=json.dumps(invalid_grid),
+              text=True, capture_output=True, timeout=30,
+          )
+          assert rejected.returncode == 2, rejected.stderr
+          assert not rejected.stdout, "Invalid sensitivity grid must not emit a partial report"
+          assert rejected.stderr.startswith("Error:")
+          print("Distributed CLI verified migration tax, Portfolio analysis, sensitivity replay, rejected incomplete inputs and OpenAPI.")
           PY

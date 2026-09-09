@@ -8,6 +8,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
 import net.bobinski.investmentsimulator.engine.ComparisonRequest
+import net.bobinski.investmentsimulator.engine.SensitivityAnalysis
+import net.bobinski.investmentsimulator.engine.SensitivityRequest
 import net.bobinski.investmentsimulator.engine.SimulationEngine
 import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisRequest
 import net.bobinski.investmentsimulator.portfolio.PortfolioAnalysisService
@@ -32,6 +34,16 @@ internal fun runCommand(
             require(args.size == 2) { "Usage: compare <request.json|->" }
             val request = simulatorJson.decodeFromString<ComparisonRequest>(readInput(args[1], input))
             output.println(simulatorJson.encodeToString(SimulationEngine.compare(request)))
+        }
+        "sensitivity" -> {
+            require(args.size == 2) { "Usage: sensitivity <request.json|->" }
+            val request = simulatorJson.decodeFromString<SensitivityRequest>(readInput(args[1], input))
+            output.println(simulatorJson.encodeToString(SensitivityAnalysis.analyze(request)))
+        }
+        "sensitivity-scenario" -> {
+            require(args.size == 3) { "Usage: sensitivity-scenario <request.json|-> <scenario-id>" }
+            val request = simulatorJson.decodeFromString<SensitivityRequest>(readInput(args[1], input))
+            output.println(simulatorJson.encodeToString(SensitivityAnalysis.resolveScenario(request, args[2])))
         }
         "import-portfolio" -> {
             require(args.size == 2) { "Usage: import-portfolio <bundle.json|->" }
@@ -70,6 +82,8 @@ private fun readInput(path: String, input: InputStream): String =
 private val USAGE = """
     investment-simulator
       compare <request.json|->    Compare strategies; JSON result goes to stdout.
+      sensitivity <request.json|->  Compare a bounded grid of assumptions and horizons.
+      sensitivity-scenario <request.json|-> <scenario-id>  Print one grid scenario for replay with compare.
       import-portfolio <bundle.json|->  Map a portfolio API snapshot to opening balances.
       analyze-portfolio <request.json|->  Analyze a Portfolio bundle and plan; exit 3 for data gaps.
       serve                       Start the HTTP API (HOST=127.0.0.1, PORT=8080).
